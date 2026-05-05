@@ -1,4 +1,4 @@
-name: CI
+name: CVGen CI
 
 on:
   push:
@@ -7,15 +7,31 @@ on:
     branches: [main, develop]
 
 jobs:
-  # ----------------------------------------
-  # Backend : build & tests Maven
-  # ----------------------------------------
-  backend:
+  # =====================================================
+  # Backend : Spring Boot + PostgreSQL (service container)
+  # =====================================================
+  backend-ci:
     name: Backend (Spring Boot)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cvgen-backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cvgen_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d cvgen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,19 +43,32 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - name: Build & test
+      - name: Build & verify
         run: mvn -B clean verify
-        if: ${{ hashFiles('cvgen-backend/pom.xml') != '' }}
+        env:
+          DB_URL: jdbc:postgresql://localhost:5432/cvgen_test
+          DB_USERNAME: test
+          DB_PASSWORD: test
+          JWT_SECRET: test_secret_key_minimum_32_characters_ok
 
-  # ----------------------------------------
-  # Frontend : build & lint Vite/React
-  # ----------------------------------------
-  frontend:
+      - name: Upload backend JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvgen-backend-jar
+          path: cvgen-backend/target/*.jar
+          if-no-files-found: warn
+          retention-days: 7
+
+  # =====================================================
+  # Frontend : Vite / React / TypeScript
+  # =====================================================
+  frontend-ci:
     name: Frontend (React + Vite)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cvgen-frontend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,12 +82,20 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        if: ${{ hashFiles('cvgen-frontend/package-lock.json') != '' }}
 
       - name: Lint
-        run: npm run lint --if-present
-        if: ${{ hashFiles('cvgen-frontend/package.json') != '' }}
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
 
       - name: Build
-        run: npm run build --if-present
-        if: ${{ hashFiles('cvgen-frontend/package.json') != '' }}
+        run: npm run build
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvgen-frontend-dist
+          path: cvgen-frontend/dist
+          if-no-files-found: error
+          retention-days: 7

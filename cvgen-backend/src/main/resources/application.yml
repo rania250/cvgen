@@ -1,0 +1,59 @@
+# =====================================================
+# Configuration CVGen - Backend Spring Boot
+# Toutes les variables sensibles proviennent de .env
+# =====================================================
+
+spring:
+  application:
+    name: cvgen-backend
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cvgen}
+    username: ${DB_USERNAME:cvgen}
+    password: ${DB_PASSWORD:cvgen}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    open-in-view: false
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# --- Configuration JWT (mappée sur JwtProperties) ---
+jwt:
+  secret: ${JWT_SECRET:change_me_in_production_min_32_chars}
+  access-token-expiration: 900000        # 15 minutes (ms)
+  refresh-token-expiration: 604800000    # 7 jours (ms)
+
+# --- Actuator : seul /health public, le reste protégé par Spring Security ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# --- Documentation OpenAPI ---
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
