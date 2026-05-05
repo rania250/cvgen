@@ -1,22 +1,42 @@
 services:
-  # Base de données PostgreSQL pour le développement local
+  # ----------------------------------------------------
+  # Base de données PostgreSQL
+  # ----------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: cvgen-postgres
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-cvgen}
-      POSTGRES_USER: ${POSTGRES_USER:-cvgen}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - cvgen_pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cvgen} -d ${POSTGRES_DB:-cvgen}"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${DB_NAME}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+
+  # ----------------------------------------------------
+  # Backend Spring Boot
+  # ----------------------------------------------------
+  backend:
+    build: ./cvgen-backend
+    container_name: cvgen-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
 
 volumes:
-  cvgen_pgdata:
+  pgdata:
