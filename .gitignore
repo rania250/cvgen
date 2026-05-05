@@ -1,0 +1,28 @@
+# Variables d'environnement
+.env
+.env.local
+.env.*.local
+
+# Build Java / Maven
+target/
+*.class
+*.jar
+*.war
+
+# Dépendances Node
+node_modules/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

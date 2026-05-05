@@ -1,0 +1,22 @@
+services:
+  # Base de données PostgreSQL pour le développement local
+  postgres:
+    image: postgres:16-alpine
+    container_name: cvgen-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cvgen}
+      POSTGRES_USER: ${POSTGRES_USER:-cvgen}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - cvgen_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cvgen} -d ${POSTGRES_DB:-cvgen}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cvgen_pgdata:
