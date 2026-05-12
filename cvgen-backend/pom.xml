@@ -32,6 +32,7 @@
         <pdfbox.version>3.0.1</pdfbox.version>
         <poi.version>5.2.5</poi.version>
         <commons-io.version>2.15.1</commons-io.version>
+        <dotenv.version>1.0.0</dotenv.version>
     </properties>
 
     <dependencies>
@@ -164,6 +165,24 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Plugin Dotenv : charge les variables d'environnement depuis .env -->
+            <plugin>
+                <groupId>io.github.cdimascio</groupId>
+                <artifactId>dotenv-maven-plugin</artifactId>
+                <version>${dotenv.version}</version>
+                <executions>
+                    <execution>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>dotenv</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <dotenvFile>../.env</dotenvFile>
                 </configuration>
             </plugin>
 

@@ -68,8 +68,9 @@ public class ExperienceEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "display_order")
-    private Integer displayOrder;
+    @Column(name = "display_order", nullable = false)
+    @Builder.Default
+    private Integer displayOrder = 0;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

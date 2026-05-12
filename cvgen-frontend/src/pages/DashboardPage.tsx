@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, FileText, LogOut, User } from 'lucide-react';
+import { ArrowRight, LogOut, Sparkles, User } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Logo from '@/components/ui/Logo';
 import { useAuthStore } from '@/store/authStore';
@@ -52,17 +52,23 @@ export default function DashboardPage() {
             <ArrowRight className="h-5 w-5 text-neutral-400 transition group-hover:translate-x-1 group-hover:text-primary-600" />
           </Link>
 
-          <div className="flex items-center justify-between rounded-2xl border border-dashed border-neutral-200 bg-white/60 p-6 text-neutral-400">
+          <Link
+            to="/dashboard/generate"
+            className="group flex items-center justify-between rounded-2xl border border-neutral-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-lg"
+          >
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-100">
-                <FileText className="h-6 w-6" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white">
+                <Sparkles className="h-6 w-6" />
               </div>
               <div>
-                <p className="font-semibold">Mes CV générés</p>
-                <p className="text-sm">Bientôt disponible</p>
+                <p className="font-semibold text-neutral-900">Générer un CV</p>
+                <p className="text-sm text-neutral-500">
+                  Créez un CV optimisé pour une offre
+                </p>
               </div>
             </div>
-          </div>
+            <ArrowRight className="h-5 w-5 text-neutral-400 transition group-hover:translate-x-1 group-hover:text-primary-600" />
+          </Link>
         </div>
       </main>
     </div>

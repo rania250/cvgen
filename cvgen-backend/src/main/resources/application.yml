@@ -47,6 +47,12 @@ jwt:
   access-token-expiration: 900000        # 15 minutes (ms)
   refresh-token-expiration: 604800000    # 7 jours (ms)
 
+# --- Configuration Gemini API (mappée sur GeminiProperties) ---
+gemini:
+  api-key: AIzaSyBTJRGvaQqDkD51ceZusUWscBbb2peDcDQ
+  api-url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com}
+  model: ${GEMINI_MODEL:gemini-2.5-flash}
+
 # --- Actuator : seul /health public, le reste protégé par Spring Security ---
 management:
   endpoints:

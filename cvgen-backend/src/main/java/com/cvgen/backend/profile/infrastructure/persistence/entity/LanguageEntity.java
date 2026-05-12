@@ -47,6 +47,7 @@ public class LanguageEntity {
     @Column(name = "language_level", length = 10)
     private LanguageLevel level;
 
-    @Column(name = "display_order")
-    private Integer displayOrder;
+    @Column(name = "display_order", nullable = false)
+    @Builder.Default
+    private Integer displayOrder = 0;
 }

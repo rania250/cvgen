@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.validator.constraints.URL;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
 
@@ -26,9 +27,11 @@ public class CreateCertificationRequest {
     @Size(max = 255)
     private String issuer;
 
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate issueDate;
 
     /** {@code null} si certification sans expiration. */
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate expiryDate;
 
     @URL(message = "URL d'identifiant invalide")

@@ -5,6 +5,7 @@ import LoginPage from '@/pages/auth/LoginPage';
 import RegisterPage from '@/pages/auth/RegisterPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/dashboard/ProfilePage';
+import GenerateCvPage from '@/pages/dashboard/GenerateCvPage';
 import { useAuthStore } from '@/store/authStore';
 import type { ReactNode } from 'react';
 
@@ -44,6 +45,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <ProfilePage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/dashboard/generate',
+    element: (
+      <RequireAuth>
+        <GenerateCvPage />
       </RequireAuth>
     ),
   },

@@ -1,5 +1,4 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from '@/store/authStore';
 
 // Instance Axios partagée pour tous les appels API
 export const axiosInstance = axios.create({
@@ -12,9 +11,17 @@ export const axiosInstance = axios.create({
 // --- Intercepteur requête : injection du token Bearer ---
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = useAuthStore.getState().accessToken;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Récupère le token depuis localStorage (persisté par Zustand)
+    const authData = localStorage.getItem('cvgen-auth');
+    if (authData) {
+      try {
+        const parsed = JSON.parse(authData);
+        if (parsed?.state?.accessToken) {
+          config.headers.Authorization = `Bearer ${parsed.state.accessToken}`;
+        }
+      } catch {
+        // Ignore parsing errors
+      }
     }
     return config;
   },
@@ -26,7 +33,8 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      useAuthStore.getState().logout();
+      // Clear auth from localStorage
+      localStorage.removeItem('cvgen-auth');
       // Redirection vers la page de connexion (hors React Router pour simplicité)
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.href = '/login';

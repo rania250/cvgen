@@ -99,8 +99,8 @@ public class ProfileService {
                 .endDate(req.getEndDate())
                 .current(req.isCurrent())
                 .description(req.getDescription())
-                .displayOrder(req.getDisplayOrder())
                 .build();
+        if (req.getDisplayOrder() != null) entity.setDisplayOrder(req.getDisplayOrder());
         return toDto(experienceRepository.save(entity));
     }
 
@@ -145,8 +145,8 @@ public class ProfileService {
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
                 .description(req.getDescription())
-                .displayOrder(req.getDisplayOrder())
                 .build();
+        if (req.getDisplayOrder() != null) entity.setDisplayOrder(req.getDisplayOrder());
         return toDto(educationRepository.save(entity));
     }
 
@@ -187,8 +187,8 @@ public class ProfileService {
                 .name(req.getName())
                 .level(req.getLevel())
                 .category(req.getCategory())
-                .displayOrder(req.getDisplayOrder())
                 .build();
+        if (req.getDisplayOrder() != null) entity.setDisplayOrder(req.getDisplayOrder());
         return toDto(skillRepository.save(entity));
     }
 
@@ -225,8 +225,8 @@ public class ProfileService {
                 .user(user)
                 .name(req.getName())
                 .level(req.getLevel())
-                .displayOrder(req.getDisplayOrder())
                 .build();
+        if (req.getDisplayOrder() != null) entity.setDisplayOrder(req.getDisplayOrder());
         return toDto(languageRepository.save(entity));
     }
 
@@ -258,8 +258,8 @@ public class ProfileService {
                 .issueDate(req.getIssueDate())
                 .expiryDate(req.getExpiryDate())
                 .credentialUrl(req.getCredentialUrl())
-                .displayOrder(req.getDisplayOrder())
                 .build();
+        if (req.getDisplayOrder() != null) entity.setDisplayOrder(req.getDisplayOrder());
         return toDto(certificationRepository.save(entity));
     }
 

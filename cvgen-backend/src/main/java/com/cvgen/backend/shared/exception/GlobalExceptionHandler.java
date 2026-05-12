@@ -4,6 +4,7 @@ import com.cvgen.backend.shared.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
@@ -88,6 +89,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("Erreurs de validation", errors));
+    }
+
+    // 400 - JSON malformé ou date invalide
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        log.warn("Erreur de parsing JSON : {}", ex.getMessage());
+        String message = "Format de données invalide. Vérifiez les dates (format: YYYY-MM-DD).";
+        if (ex.getMessage() != null && ex.getMessage().contains("LocalDate")) {
+            message = "Date invalide. Utilisez le format YYYY-MM-DD (ex: 2024-01-15).";
+        }
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(message));
     }
 
     // 500 - Fallback

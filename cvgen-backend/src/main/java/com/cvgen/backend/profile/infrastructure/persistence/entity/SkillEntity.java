@@ -57,8 +57,9 @@ public class SkillEntity {
     @Column(name = "category", length = 100)
     private String category;
 
-    @Column(name = "display_order")
-    private Integer displayOrder;
+    @Column(name = "display_order", nullable = false)
+    @Builder.Default
+    private Integer displayOrder = 0;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

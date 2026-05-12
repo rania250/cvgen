@@ -1,5 +1,5 @@
 # Variables d'environnement
-.env
+
 .env.local
 .env.*.local
 
@@ -13,7 +13,7 @@ target/
 node_modules/
 dist/
 build/
-
+    
 # IDE
 .idea/
 .vscode/
