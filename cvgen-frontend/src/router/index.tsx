@@ -1,8 +1,10 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import HomePage from '@/pages/HomePage';
+import AnalyzePage from '@/pages/AnalyzePage';
 import LoginPage from '@/pages/auth/LoginPage';
 import RegisterPage from '@/pages/auth/RegisterPage';
 import DashboardPage from '@/pages/DashboardPage';
+import ProfilePage from '@/pages/dashboard/ProfilePage';
 import { useAuthStore } from '@/store/authStore';
 import type { ReactNode } from 'react';
 
@@ -18,6 +20,10 @@ export const router = createBrowserRouter([
     element: <HomePage />,
   },
   {
+    path: '/analyze',
+    element: <AnalyzePage />,
+  },
+  {
     path: '/login',
     element: <LoginPage />,
   },
@@ -30,6 +36,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <DashboardPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/dashboard/profile',
+    element: (
+      <RequireAuth>
+        <ProfilePage />
       </RequireAuth>
     ),
   },

@@ -4,6 +4,7 @@ import com.cvgen.backend.shared.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -42,6 +43,39 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error("Identifiants invalides"));
+    }
+
+    // 403 - Accès refusé (ressource n'appartient pas à l'utilisateur courant)
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    // 404 - Ressource introuvable
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(ResourceNotFoundException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    // 400 - Fichier illisible / corrompu / trop volumineux
+    @ExceptionHandler(FileProcessingException.class)
+    public ResponseEntity<ApiResponse<Void>> handleFileProcessing(FileProcessingException ex) {
+        log.warn("Échec de traitement de fichier : {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    // 415 - Format de fichier non supporté
+    @ExceptionHandler(UnsupportedFileTypeException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnsupportedFileType(UnsupportedFileTypeException ex) {
+        return ResponseEntity
+                .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ApiResponse.error(ex.getMessage()));
     }
 
     // 400 - Erreurs de validation @Valid

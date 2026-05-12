@@ -53,7 +53,7 @@ export default function Navbar() {
               >
                 Connexion
               </Link>
-              <Button onClick={() => navigate('/register')}>Commencer gratuitement</Button>
+              <Button onClick={() => navigate('/analyze')}>Commencer gratuitement</Button>
             </>
           )}
         </div>
@@ -93,7 +93,7 @@ export default function Navbar() {
                   <Button variant="outline" fullWidth onClick={() => navigate('/login')}>
                     Connexion
                   </Button>
-                  <Button fullWidth onClick={() => navigate('/register')}>
+                  <Button fullWidth onClick={() => navigate('/analyze')}>
                     Commencer gratuitement
                   </Button>
                 </>
