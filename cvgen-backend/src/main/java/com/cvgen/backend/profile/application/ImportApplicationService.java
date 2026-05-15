@@ -1,10 +1,13 @@
 package com.cvgen.backend.profile.application;
 
+import com.cvgen.backend.profile.api.dto.CreateCertificationRequest;
 import com.cvgen.backend.profile.api.dto.CreateEducationRequest;
 import com.cvgen.backend.profile.api.dto.CreateExperienceRequest;
 import com.cvgen.backend.profile.api.dto.CreateLanguageRequest;
+import com.cvgen.backend.profile.api.dto.CreateProjectRequest;
 import com.cvgen.backend.profile.api.dto.CreateSkillRequest;
 import com.cvgen.backend.profile.api.dto.ParsedCvDto;
+import com.cvgen.backend.profile.api.dto.ParsedProjectDto;
 import com.cvgen.backend.profile.api.dto.UpdateProfileRequest;
 import com.cvgen.backend.profile.api.dto.UserProfileDto;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +39,13 @@ public class ImportApplicationService {
      */
     public UserProfileDto applyParsedCv(UUID userId, ParsedCvDto dto) {
         log.info("Application du CV parsé pour l'utilisateur {}", userId);
+        log.info("DTO reçu du frontend — experiences={}, educations={}, skills={}, languages={}, certifications={}, projects={}",
+                dto.getExperiences() != null ? dto.getExperiences().size() : "null",
+                dto.getEducations() != null ? dto.getEducations().size() : "null",
+                dto.getSkills() != null ? dto.getSkills().size() : "null",
+                dto.getLanguages() != null ? dto.getLanguages().size() : "null",
+                dto.getCertifications() != null ? dto.getCertifications().size() : "null",
+                dto.getProjects() != null ? dto.getProjects().size() : "null");
 
         // 1. Mettre à jour les informations générales du profil
         if (dto.getProfileInfo() != null) {
@@ -62,13 +72,25 @@ public class ImportApplicationService {
             applyLanguages(userId, dto.getLanguages());
         }
 
+        // 6. Ajouter les certifications
+        if (dto.getCertifications() != null && !dto.getCertifications().isEmpty()) {
+            applyCertifications(userId, dto.getCertifications());
+        }
+
+        // 7. Ajouter les projets
+        if (dto.getProjects() != null && !dto.getProjects().isEmpty()) {
+            applyProjects(userId, dto.getProjects());
+        }
+
         log.info("CV importé avec succès pour l'utilisateur {} : {} expériences, {} formations, " +
-                "{} compétences, {} langues",
+                "{} compétences, {} langues, {} certifications, {} projets",
                 userId,
                 dto.getExperiences() != null ? dto.getExperiences().size() : 0,
                 dto.getEducations() != null ? dto.getEducations().size() : 0,
                 dto.getSkills() != null ? dto.getSkills().size() : 0,
-                dto.getLanguages() != null ? dto.getLanguages().size() : 0);
+                dto.getLanguages() != null ? dto.getLanguages().size() : 0,
+                dto.getCertifications() != null ? dto.getCertifications().size() : 0,
+                dto.getProjects() != null ? dto.getProjects().size() : 0);
 
         // Retourner le profil complet mis à jour
         return profileService.getUserProfile(userId);
@@ -124,6 +146,17 @@ public class ImportApplicationService {
     }
 
     private void applyExperiences(UUID userId, List<CreateExperienceRequest> experiences) {
+        // Supprimer toutes les expériences existantes
+        var existingExperiences = profileService.getUserProfile(userId).experiences();
+        for (var exp : existingExperiences) {
+            try {
+                profileService.deleteExperience(userId, exp.id());
+            } catch (Exception ex) {
+                log.error("Échec de la suppression de l'expérience '{}' : {}", exp.jobTitle(), ex.getMessage());
+            }
+        }
+
+        // Ajouter les nouvelles expériences
         int order = 0;
         for (CreateExperienceRequest exp : experiences) {
             // S'assurer que les champs obligatoires sont présents
@@ -154,6 +187,17 @@ public class ImportApplicationService {
     }
 
     private void applyEducations(UUID userId, List<CreateEducationRequest> educations) {
+        // Supprimer toutes les formations existantes
+        var existingEducations = profileService.getUserProfile(userId).educations();
+        for (var edu : existingEducations) {
+            try {
+                profileService.deleteEducation(userId, edu.id());
+            } catch (Exception ex) {
+                log.error("Échec de la suppression de la formation '{}' : {}", edu.school(), ex.getMessage());
+            }
+        }
+
+        // Ajouter les nouvelles formations
         int order = 0;
         for (CreateEducationRequest edu : educations) {
             // S'assurer que l'établissement est présent
@@ -176,6 +220,17 @@ public class ImportApplicationService {
     }
 
     private void applySkills(UUID userId, List<CreateSkillRequest> skills) {
+        // Supprimer toutes les compétences existantes
+        var existingSkills = profileService.getUserProfile(userId).skills();
+        for (var skill : existingSkills) {
+            try {
+                profileService.deleteSkill(userId, skill.id());
+            } catch (Exception ex) {
+                log.error("Échec de la suppression de la compétence '{}' : {}", skill.name(), ex.getMessage());
+            }
+        }
+
+        // Ajouter les nouvelles compétences
         int order = 0;
         for (CreateSkillRequest skill : skills) {
             // S'assurer que le nom est présent
@@ -197,7 +252,83 @@ public class ImportApplicationService {
         log.debug("{} compétences ajoutées pour l'utilisateur {}", order, userId);
     }
 
+    private void applyCertifications(UUID userId, List<CreateCertificationRequest> certifications) {
+        // Supprimer toutes les certifications existantes
+        var existing = profileService.getUserProfile(userId).certifications();
+        for (var cert : existing) {
+            try {
+                profileService.deleteCertification(userId, cert.id());
+            } catch (Exception ex) {
+                log.error("Échec de la suppression de la certification '{}' : {}", cert.name(), ex.getMessage());
+            }
+        }
+
+        int order = 0;
+        for (CreateCertificationRequest cert : certifications) {
+            if (cert.getName() == null || cert.getName().isBlank()) {
+                log.warn("Certification ignorée : nom manquant");
+                continue;
+            }
+            cert.setName(truncate(cert.getName(), 255));
+            if (cert.getIssuer() != null) cert.setIssuer(truncate(cert.getIssuer(), 255));
+            cert.setDisplayOrder(order);
+            try {
+                profileService.addCertification(userId, cert);
+                order++;
+            } catch (Exception ex) {
+                log.error("Échec de l'ajout de la certification '{}' : {}", cert.getName(), ex.getMessage());
+            }
+        }
+        log.debug("{} certifications ajoutées pour l'utilisateur {}", order, userId);
+    }
+
+    private void applyProjects(UUID userId, List<ParsedProjectDto> projects) {
+        var existing = profileService.getUserProfile(userId).projects();
+        for (var proj : existing) {
+            try {
+                profileService.deleteProject(userId, proj.id());
+            } catch (Exception ex) {
+                log.error("Échec de la suppression du projet '{}' : {}", proj.name(), ex.getMessage());
+            }
+        }
+
+        int order = 0;
+        for (ParsedProjectDto p : projects) {
+            if (p.getName() == null || p.getName().isBlank()) {
+                log.warn("Projet ignoré : nom manquant");
+                continue;
+            }
+            CreateProjectRequest req = CreateProjectRequest.builder()
+                    .name(truncate(p.getName(), 255))
+                    .description(p.getDescription() != null ? truncate(p.getDescription(), 5000) : null)
+                    .techStack(p.getTechStack() != null ? truncate(p.getTechStack(), 500) : null)
+                    .url(p.getUrl())
+                    .startDate(p.getStartDate())
+                    .endDate(p.getEndDate())
+                    .displayOrder(order)
+                    .build();
+            try {
+                profileService.addProject(userId, req);
+                order++;
+            } catch (Exception ex) {
+                log.error("Échec de l'ajout du projet '{}' : {}", p.getName(), ex.getMessage());
+            }
+        }
+        log.debug("{} projets ajoutés pour l'utilisateur {}", order, userId);
+    }
+
     private void applyLanguages(UUID userId, List<CreateLanguageRequest> languages) {
+        // Supprimer toutes les langues existantes
+        var existingLanguages = profileService.getUserProfile(userId).languages();
+        for (var lang : existingLanguages) {
+            try {
+                profileService.deleteLanguage(userId, lang.id());
+            } catch (Exception ex) {
+                log.error("Échec de la suppression de la langue '{}' : {}", lang.name(), ex.getMessage());
+            }
+        }
+
+        // Ajouter les nouvelles langues
         int order = 0;
         for (CreateLanguageRequest lang : languages) {
             // S'assurer que le nom est présent

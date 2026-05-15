@@ -29,4 +29,19 @@ export const generationApi = {
     );
     return unwrap(data);
   },
+
+  /**
+   * Exporte un CV généré au format PDF.
+   * @param generatedCvId ID du CV généré
+   * @param templateId ID du template à utiliser (ex: "template1")
+   * @returns Blob du PDF téléchargeable
+   */
+  exportPdf: async (generatedCvId: string, templateId: string): Promise<Blob> => {
+    const { data } = await axiosInstance.post(
+      `${BASE}/${generatedCvId}/export-pdf`,
+      { templateId },
+      { responseType: 'blob' }
+    );
+    return data;
+  },
 };

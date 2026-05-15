@@ -1,0 +1,87 @@
+﻿\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{url}
+\usepackage{parskip}
+\RequirePackage{color}
+\RequirePackage{graphicx}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage[scale=0.9]{geometry}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\usepackage{supertabular}
+\usepackage{titlesec}
+\usepackage{multicol}
+\usepackage{multirow}
+\titleformat{\section}{\Large\scshape\raggedright}{}{0em}{}[\titlerule]
+\titlespacing{\section}{0pt}{10pt}{10pt}
+\usepackage[unicode, draft=false]{hyperref}
+\definecolor{linkcolour}{rgb}{0,0.2,0.6}
+\hypersetup{colorlinks,breaklinks,urlcolor=linkcolour,linkcolor=linkcolour}
+\usepackage{fontawesome5}
+
+\newenvironment{jobshort}[2]
+    {
+    \begin{tabularx}{\linewidth}{@{}l X r@{}}
+    \textbf{#1} & \hfill &  #2 \\[3.75pt]
+    \end{tabularx}
+    }
+    {
+    }
+
+\newenvironment{joblong}[2]
+    {
+    \begin{tabularx}{\linewidth}{@{}l X r@{}}
+    \textbf{#1} & \hfill &  #2 \\[3.75pt]
+    \end{tabularx}
+    \begin{minipage}[t]{\linewidth}
+    \begin{itemize}[nosep,after=\strut, leftmargin=1em, itemsep=3pt,label=--]
+    }
+    {
+    \end{itemize}
+    \end{minipage}
+    }
+
+\begin{document}
+\pagestyle{empty}
+
+\begin{tabularx}{\linewidth}{@{} C @{}}
+\Huge{{{FULL_NAME}}} \\[7.5pt]
+{{GITHUB_URL}} {{LINKEDIN_URL}} {{PORTFOLIO_URL}} \href{mailto:{{EMAIL}}}{\raisebox{-0.05\height}\faEnvelope \ {{EMAIL}}} \ $|$ \ \href{tel:{{PHONE}}}{\raisebox{-0.05\height}\faMobile \ {{PHONE}}} \\
+{{MOBILITY_NOTE}} \\
+\end{tabularx}
+
+\section{Summary}
+{{BIO}}
+
+\section{Work Experience}
+{{EXPERIENCES}}
+
+\section{Projects}
+{{PROJECTS}}
+
+\section{Education}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+{{EDUCATIONS}}
+\end{tabularx}
+
+\section{Skills}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+{{SKILLS}}
+\end{tabularx}
+
+\section{Certifications}
+{{CERTIFICATIONS}}
+
+\section{Languages}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+{{LANGUAGES}}
+\end{tabularx}
+
+\vfill
+\center{\footnotesize Last updated: {{LAST_UPDATED}}}
+
+\end{document}

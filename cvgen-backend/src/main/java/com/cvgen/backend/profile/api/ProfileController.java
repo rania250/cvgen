@@ -6,10 +6,12 @@ import com.cvgen.backend.profile.api.dto.CreateCertificationRequest;
 import com.cvgen.backend.profile.api.dto.CreateEducationRequest;
 import com.cvgen.backend.profile.api.dto.CreateExperienceRequest;
 import com.cvgen.backend.profile.api.dto.CreateLanguageRequest;
+import com.cvgen.backend.profile.api.dto.CreateProjectRequest;
 import com.cvgen.backend.profile.api.dto.CreateSkillRequest;
 import com.cvgen.backend.profile.api.dto.EducationDto;
 import com.cvgen.backend.profile.api.dto.ExperienceDto;
 import com.cvgen.backend.profile.api.dto.LanguageDto;
+import com.cvgen.backend.profile.api.dto.ProjectDto;
 import com.cvgen.backend.profile.api.dto.ReorderRequest;
 import com.cvgen.backend.profile.api.dto.SkillDto;
 import com.cvgen.backend.profile.api.dto.UpdateProfileRequest;
@@ -264,6 +266,39 @@ public class ProfileController {
             @PathVariable UUID id) {
         profileService.deleteCertification(currentUserId(auth), id);
         return ResponseEntity.ok(ApiResponse.success("Certification supprimée", null));
+    }
+
+    // =====================================================
+    // Projects
+    // =====================================================
+
+    @PostMapping("/projects")
+    @Operation(summary = "Ajoute un projet personnel/technique")
+    public ResponseEntity<ApiResponse<ProjectDto>> addProject(
+            Authentication auth,
+            @Valid @RequestBody CreateProjectRequest request) {
+        ProjectDto dto = profileService.addProject(currentUserId(auth), request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Projet ajouté", dto));
+    }
+
+    @PutMapping("/projects/{id}")
+    @Operation(summary = "Met à jour un projet")
+    public ResponseEntity<ApiResponse<ProjectDto>> updateProject(
+            Authentication auth,
+            @PathVariable UUID id,
+            @Valid @RequestBody CreateProjectRequest request) {
+        ProjectDto dto = profileService.updateProject(currentUserId(auth), id, request);
+        return ResponseEntity.ok(ApiResponse.success("Projet mis à jour", dto));
+    }
+
+    @DeleteMapping("/projects/{id}")
+    @Operation(summary = "Supprime un projet")
+    public ResponseEntity<ApiResponse<Void>> deleteProject(
+            Authentication auth,
+            @PathVariable UUID id) {
+        profileService.deleteProject(currentUserId(auth), id);
+        return ResponseEntity.ok(ApiResponse.success("Projet supprimé", null));
     }
 
     // =====================================================

@@ -60,13 +60,15 @@ public class CvImportService {
      */
     public ParsedCvDto extractAndParse(MultipartFile file) {
         String rawText = extractTextFromFile(file);
-        log.info("Texte extrait ({} caractères), début du parsing...", rawText.length());
+        log.info("Texte extrait ({} caractères), début du parsing IA...", rawText.length());
         ParsedCvDto result = cvParserService.parseCv(rawText);
-        log.info("Parsing terminé : {} expériences, {} formations, {} compétences, {} langues",
+        log.info("Parsing IA terminé : {} expériences, {} formations, {} compétences, {} langues, {} certifications, {} projets",
                 result.getExperiences().size(),
                 result.getEducations().size(),
                 result.getSkills().size(),
-                result.getLanguages().size());
+                result.getLanguages().size(),
+                result.getCertifications().size(),
+                result.getProjects() != null ? result.getProjects().size() : 0);
         return result;
     }
 

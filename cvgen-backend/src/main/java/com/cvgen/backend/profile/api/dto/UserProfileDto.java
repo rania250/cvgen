@@ -27,6 +27,7 @@ public record UserProfileDto(
         List<EducationDto> educations,
         List<SkillDto> skills,
         List<LanguageDto> languages,
-        List<CertificationDto> certifications
+        List<CertificationDto> certifications,
+        List<ProjectDto> projects
 ) {
 }

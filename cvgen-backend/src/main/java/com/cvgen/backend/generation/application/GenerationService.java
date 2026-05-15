@@ -2,29 +2,25 @@ package com.cvgen.backend.generation.application;
 
 import com.cvgen.backend.auth.infrastructure.persistence.UserJpaRepository;
 import com.cvgen.backend.generation.api.dto.*;
-import com.cvgen.backend.generation.infrastructure.gemini.GeminiResponse;
+import com.cvgen.backend.generation.infrastructure.gemini.GeminiClient;
 import com.cvgen.backend.generation.infrastructure.persistence.GeneratedCvRepository;
 import com.cvgen.backend.generation.infrastructure.persistence.entity.GeneratedCvEntity;
 import com.cvgen.backend.profile.api.dto.*;
 import com.cvgen.backend.profile.application.ProfileService;
-import com.cvgen.backend.shared.config.GeminiProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service métier de génération de CV optimisé via Gemini AI.
@@ -38,14 +34,11 @@ public class GenerationService {
     private final ProfileService profileService;
     private final GeneratedCvRepository generatedCvRepository;
     private final UserJpaRepository userRepository;
-    private final GeminiProperties geminiProperties;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final GeminiClient geminiClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-    private static final String GEMINI_API_VERSION = "v1beta";
 
     /**
      * Génère un CV optimisé pour une offre d'emploi.
@@ -61,11 +54,14 @@ public class GenerationService {
         // 2. Construire le prompt pour Gemini
         String prompt = buildPrompt(profile, jobOfferText);
 
-        // 3. Appeler l'API Gemini
-        String geminiResponse = callGeminiApi(prompt);
+        // 3. Appeler l'API Gemini (T=0.7 pour de la réécriture optimisée)
+        String geminiResponse = geminiClient.generateContent(prompt, 0.7, 8192);
 
         // 4. Parser la réponse JSON de Gemini
         SelectedCvContent generatedContent = parseGeminiResponse(geminiResponse);
+
+        // 4b. Garantir toutes les formations du profil + valider les projets
+        enrichGeneratedContent(generatedContent, profile);
 
         // 5. Sauvegarder le résultat en base
         GeneratedCvEntity savedEntity = saveGeneratedCv(userId, jobOfferText, generatedContent);
@@ -93,6 +89,15 @@ public class GenerationService {
         prompt.append("Titre actuel: ").append(profile.title() != null ? profile.title() : "Non renseigné").append("\n");
         prompt.append("Résumé: ").append(profile.summary() != null ? profile.summary() : "Non renseigné").append("\n");
         prompt.append("Localisation: ").append(profile.location() != null ? profile.location() : "Non renseignée").append("\n");
+        if (profile.linkedinUrl() != null && !profile.linkedinUrl().isBlank()) {
+            prompt.append("LinkedIn: ").append(profile.linkedinUrl()).append("\n");
+        }
+        if (profile.githubUrl() != null && !profile.githubUrl().isBlank()) {
+            prompt.append("GitHub: ").append(profile.githubUrl()).append("\n");
+        }
+        if (profile.portfolioUrl() != null && !profile.portfolioUrl().isBlank()) {
+            prompt.append("Portfolio: ").append(profile.portfolioUrl()).append("\n");
+        }
 
         // Expériences
         prompt.append("\n--- EXPÉRIENCES PROFESSIONNELLES ---\n");
@@ -100,8 +105,9 @@ public class GenerationService {
             prompt.append("Poste: ").append(exp.jobTitle()).append("\n");
             prompt.append("Entreprise: ").append(exp.company()).append("\n");
             prompt.append("Lieu: ").append(exp.location() != null ? exp.location() : "Non renseigné").append("\n");
-            prompt.append("Période: ").append(exp.startDate()).append(" à ")
-                    .append(exp.current() ? "Aujourd'hui" : exp.endDate()).append("\n");
+            String startStr = formatSafeDate(exp.startDate());
+            String endStr = exp.current() ? "Aujourd'hui" : formatSafeDate(exp.endDate());
+            prompt.append("Période: ").append(startStr).append(" à ").append(endStr).append("\n");
             prompt.append("Description: ").append(exp.description() != null ? exp.description() : "Non renseignée").append("\n\n");
         }
 
@@ -111,8 +117,8 @@ public class GenerationService {
             prompt.append("Diplôme: ").append(edu.degree() != null ? edu.degree() : "Non renseigné").append("\n");
             prompt.append("École: ").append(edu.school()).append("\n");
             prompt.append("Domaine: ").append(edu.fieldOfStudy() != null ? edu.fieldOfStudy() : "Non renseigné").append("\n");
-            prompt.append("Période: ").append(edu.startDate() != null ? edu.startDate() : "?")
-                    .append(" à ").append(edu.endDate() != null ? edu.endDate() : "?").append("\n\n");
+            prompt.append("Période: ").append(formatSafeDate(edu.startDate()))
+                    .append(" à ").append(formatSafeDate(edu.endDate())).append("\n\n");
         }
 
         // Compétences
@@ -138,13 +144,31 @@ public class GenerationService {
             prompt.append("\n");
         }
 
+        // Projets
+        if (profile.projects() != null && !profile.projects().isEmpty()) {
+            prompt.append("\n--- PROJETS ---\n");
+            for (ProjectDto project : profile.projects()) {
+                prompt.append("Nom: ").append(project.name()).append("\n");
+                prompt.append("Description: ").append(project.description() != null ? project.description() : "Non renseignée").append("\n");
+                prompt.append("Stack technique: ").append(project.techStack() != null ? project.techStack() : "Non renseigné").append("\n");
+                if (project.url() != null && !project.url().isBlank()) {
+                    prompt.append("URL: ").append(project.url()).append("\n");
+                }
+                prompt.append("Période: ").append(formatSafeDate(project.startDate()))
+                        .append(" à ").append(formatSafeDate(project.endDate())).append("\n\n");
+            }
+        }
+
         // Certifications
-        if (!profile.certifications().isEmpty()) {
+        if (profile.certifications() != null && !profile.certifications().isEmpty()) {
             prompt.append("\n--- CERTIFICATIONS ---\n");
             for (CertificationDto cert : profile.certifications()) {
                 prompt.append("- ").append(cert.name());
                 if (cert.issuer() != null) {
                     prompt.append(" (").append(cert.issuer()).append(")");
+                }
+                if (cert.issueDate() != null) {
+                    prompt.append(" — ").append(formatSafeDate(cert.issueDate()));
                 }
                 prompt.append("\n");
             }
@@ -176,7 +200,18 @@ public class GenerationService {
         prompt.append("      \"startDate\": \"YYYY-MM-DD\",\n");
         prompt.append("      \"endDate\": \"YYYY-MM-DD\"\n");
         prompt.append("    }\n");
-        prompt.append("    // Maximum 1 formation la plus pertinente ou prestigieuse\n");
+        prompt.append("    // INCLURE TOUTES les formations du profil ci-dessus, sans en omettre aucune\n");
+        prompt.append("  ],\n");
+        prompt.append("  \"projects\": [\n");
+        prompt.append("    {\n");
+        prompt.append("      \"name\": \"...\",\n");
+        prompt.append("      \"description\": \"Description optimisée pour l'offre, mettant en avant les technologies et résultats pertinents\",\n");
+        prompt.append("      \"techStack\": \"Technologies utilisées (ex: Java, React, PostgreSQL)\",\n");
+        prompt.append("      \"url\": \"URL du projet ou null\",\n");
+        prompt.append("      \"startDate\": \"YYYY-MM-DD ou null\",\n");
+        prompt.append("      \"endDate\": \"YYYY-MM-DD ou null\"\n");
+        prompt.append("    }\n");
+        prompt.append("    // Maximum 2 projets les plus pertinents pour l'offre d'emploi\n");
         prompt.append("  ],\n");
         prompt.append("  \"skills\": [\n");
         prompt.append("    {\n");
@@ -199,76 +234,104 @@ public class GenerationService {
         prompt.append("      \"issuer\": \"...\",\n");
         prompt.append("      \"issueDate\": \"YYYY-MM-DD\"\n");
         prompt.append("    }\n");
-        prompt.append("    // Maximum 2 certifications les plus pertinentes\n");
+        prompt.append("    // Inclure TOUTES les certifications du profil (max 4)\n");
         prompt.append("  ]\n");
         prompt.append("}\n\n");
         prompt.append("RÈGLES IMPORTANTES :\n");
         prompt.append("1. Sélectionne UNIQUEMENT les informations les plus pertinentes pour L'OFFRE\n");
         prompt.append("2. Réécris les descriptions pour mettre en avant les réalisations chiffrées\n");
         prompt.append("3. Adapte le titre professionnel aux mots-clés de l'offre\n");
-        prompt.append("4. Limite : max 4 expériences, max 12 skills, max 2 certifications, max 1 formation\n");
-        prompt.append("5. Réponse UNIQUEMENT en JSON, sans markdown, sans texte avant/après");
+        prompt.append("4. Limite : max 4 expériences, max 12 skills, max 4 certifications, max 2 projets pertinents pour l'offre\n");
+        prompt.append("5. INCLURE TOUTES les formations du profil dans \"educations\", sans en omettre aucune.\n");
+        prompt.append("6. INCLURE TOUTES les certifications présentes dans le profil ci-dessus, même si peu liées à l'offre.\n");
+        prompt.append("7. Sélectionne uniquement les projets dont le stack ou la description correspondent au poste visé.\n");
+        prompt.append("8. Si une date est manquante ou suspecte (laissée à vide ci-dessus), retourne null pour cette date plutôt que d'inventer.\n");
+        prompt.append("9. Réponse UNIQUEMENT en JSON, sans markdown, sans texte avant/après");
 
         return prompt.toString();
     }
 
     /**
-     * Appelle l'API Gemini et retourne le texte de réponse.
+     * Complète le contenu généré : toutes les formations du profil,
+     * projets filtrés sur ceux présents dans le profil.
      */
-    private String callGeminiApi(String prompt) {
-        String apiKey = geminiProperties.apiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("Clé API Gemini non configurée (gemini.api-key)");
+    private void enrichGeneratedContent(SelectedCvContent content, UserProfileDto profile) {
+        content.setEducations(mapAllEducations(profile.educations()));
+
+        if (profile.projects() == null || profile.projects().isEmpty()) {
+            content.setProjects(Collections.emptyList());
+            return;
         }
 
-        String model = geminiProperties.model() != null ? geminiProperties.model() : "gemini-1.5-flash-latest";
-        String baseUrl = geminiProperties.apiUrl() != null
-                ? geminiProperties.apiUrl()
-                : "https://generativelanguage.googleapis.com";
+        Map<String, ProjectDto> profileByName = profile.projects().stream()
+                .filter(p -> p.name() != null && !p.name().isBlank())
+                .collect(Collectors.toMap(
+                        p -> p.name().trim().toLowerCase(Locale.ROOT),
+                        p -> p,
+                        (a, b) -> a,
+                        LinkedHashMap::new));
 
-        String url = String.format("%s/%s/models/%s:generateContent?key=%s",
-                baseUrl, GEMINI_API_VERSION, model, apiKey);
-
-        // Construire le corps de la requête
-        Map<String, Object> requestBody = new HashMap<>();
-        Map<String, Object> content = new HashMap<>();
-        Map<String, Object> part = new HashMap<>();
-        part.put("text", prompt);
-        content.put("parts", List.of(part));
-        requestBody.put("contents", List.of(content));
-
-        // Configuration pour JSON
-        Map<String, Object> generationConfig = new HashMap<>();
-        generationConfig.put("temperature", 0.7);
-        generationConfig.put("maxOutputTokens", 8192);
-        requestBody.put("generationConfig", generationConfig);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-
-        try {
-            ResponseEntity<GeminiResponse> response = restTemplate.postForEntity(
-                    url, entity, GeminiResponse.class);
-
-            GeminiResponse body = response.getBody();
-        if (body == null || body.getCandidates() == null || body.getCandidates().isEmpty()) {
-                throw new RuntimeException("Réponse vide de Gemini");
+        List<SelectedProjectDto> merged = new ArrayList<>();
+        if (content.getProjects() != null) {
+            for (SelectedProjectDto selected : content.getProjects()) {
+                if (selected.getName() == null || selected.getName().isBlank()) {
+                    continue;
+                }
+                ProjectDto profileProject = profileByName.get(selected.getName().trim().toLowerCase(Locale.ROOT));
+                if (profileProject != null) {
+                    merged.add(mergeProject(selected, profileProject));
+                    if (merged.size() >= 2) {
+                        break;
+                    }
+                }
             }
-
-            GeminiResponse.Candidate candidate = body.getCandidates().get(0);
-            if (candidate.getContent() == null || candidate.getContent().getParts() == null
-                    || candidate.getContent().getParts().isEmpty()) {
-                throw new RuntimeException("Contenu vide dans la réponse Gemini");
-            }
-
-            return candidate.getContent().getParts().get(0).getText();
-
-        } catch (Exception e) {
-            log.error("Erreur lors de l'appel à Gemini", e);
-            throw new RuntimeException("Erreur de génération CV: " + e.getMessage(), e);
         }
+        content.setProjects(merged);
+    }
+
+    private SelectedProjectDto mergeProject(SelectedProjectDto gemini, ProjectDto profile) {
+        return SelectedProjectDto.builder()
+                .name(profile.name())
+                .description(hasText(gemini.getDescription()) ? gemini.getDescription() : profile.description())
+                .techStack(hasText(gemini.getTechStack()) ? gemini.getTechStack() : profile.techStack())
+                .url(hasText(gemini.getUrl()) ? gemini.getUrl() : profile.url())
+                .startDate(gemini.getStartDate() != null ? gemini.getStartDate()
+                        : profile.startDate() != null ? profile.startDate().toString() : null)
+                .endDate(gemini.getEndDate() != null ? gemini.getEndDate()
+                        : profile.endDate() != null ? profile.endDate().toString() : null)
+                .build();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private List<SelectedEducationDto> mapAllEducations(List<EducationDto> educations) {
+        if (educations == null || educations.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<SelectedEducationDto> result = new ArrayList<>();
+        for (EducationDto edu : educations) {
+            result.add(SelectedEducationDto.builder()
+                    .degree(edu.degree())
+                    .school(edu.school())
+                    .fieldOfStudy(edu.fieldOfStudy())
+                    .startDate(edu.startDate() != null ? edu.startDate().toString() : null)
+                    .endDate(edu.endDate() != null ? edu.endDate().toString() : null)
+                    .build());
+        }
+        return result;
+    }
+
+    /**
+     * Formate une date pour le prompt en filtrant les valeurs aberrantes :
+     * une date antérieure à l'an 2000 est considérée comme parsing-bruit
+     * (cf. Bug "02/2000" injecté par l'import PDF) et remplacée par "Non précisée".
+     */
+    private String formatSafeDate(LocalDate date) {
+        if (date == null) return "Non précisée";
+        if (date.getYear() < 2000) return "Non précisée";
+        return date.toString();
     }
 
     /**
@@ -309,6 +372,8 @@ public class GenerationService {
                     .summary(content.getSummary())
                     .experiences(objectMapper.writeValueAsString(content.getExperiences()))
                     .educations(objectMapper.writeValueAsString(content.getEducations()))
+                    .projects(objectMapper.writeValueAsString(
+                            content.getProjects() != null ? content.getProjects() : Collections.emptyList()))
                     .skills(objectMapper.writeValueAsString(content.getSkills()))
                     .languages(objectMapper.writeValueAsString(content.getLanguages()))
                     .certifications(objectMapper.writeValueAsString(content.getCertifications()))

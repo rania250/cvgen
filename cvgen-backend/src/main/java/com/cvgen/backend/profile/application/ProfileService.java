@@ -7,10 +7,12 @@ import com.cvgen.backend.profile.api.dto.CreateCertificationRequest;
 import com.cvgen.backend.profile.api.dto.CreateEducationRequest;
 import com.cvgen.backend.profile.api.dto.CreateExperienceRequest;
 import com.cvgen.backend.profile.api.dto.CreateLanguageRequest;
+import com.cvgen.backend.profile.api.dto.CreateProjectRequest;
 import com.cvgen.backend.profile.api.dto.CreateSkillRequest;
 import com.cvgen.backend.profile.api.dto.EducationDto;
 import com.cvgen.backend.profile.api.dto.ExperienceDto;
 import com.cvgen.backend.profile.api.dto.LanguageDto;
+import com.cvgen.backend.profile.api.dto.ProjectDto;
 import com.cvgen.backend.profile.api.dto.SkillDto;
 import com.cvgen.backend.profile.api.dto.UpdateProfileRequest;
 import com.cvgen.backend.profile.api.dto.UserProfileDto;
@@ -18,12 +20,14 @@ import com.cvgen.backend.profile.infrastructure.persistence.CertificationReposit
 import com.cvgen.backend.profile.infrastructure.persistence.EducationRepository;
 import com.cvgen.backend.profile.infrastructure.persistence.ExperienceRepository;
 import com.cvgen.backend.profile.infrastructure.persistence.LanguageRepository;
+import com.cvgen.backend.profile.infrastructure.persistence.ProjectRepository;
 import com.cvgen.backend.profile.infrastructure.persistence.SkillRepository;
 import com.cvgen.backend.profile.infrastructure.persistence.UserProfileRepository;
 import com.cvgen.backend.profile.infrastructure.persistence.entity.CertificationEntity;
 import com.cvgen.backend.profile.infrastructure.persistence.entity.EducationEntity;
 import com.cvgen.backend.profile.infrastructure.persistence.entity.ExperienceEntity;
 import com.cvgen.backend.profile.infrastructure.persistence.entity.LanguageEntity;
+import com.cvgen.backend.profile.infrastructure.persistence.entity.ProjectEntity;
 import com.cvgen.backend.profile.infrastructure.persistence.entity.SkillEntity;
 import com.cvgen.backend.profile.infrastructure.persistence.entity.UserProfileEntity;
 import com.cvgen.backend.shared.exception.ResourceNotFoundException;
@@ -56,6 +60,7 @@ public class ProfileService {
     private final SkillRepository skillRepository;
     private final LanguageRepository languageRepository;
     private final CertificationRepository certificationRepository;
+    private final ProjectRepository projectRepository;
 
     // =====================================================
     // Profil principal
@@ -282,6 +287,44 @@ public class ProfileService {
     }
 
     // =====================================================
+    // Projects
+    // =====================================================
+
+    public ProjectDto addProject(UUID userId, CreateProjectRequest req) {
+        UserEntity user = requireUser(userId);
+        ProjectEntity entity = ProjectEntity.builder()
+                .user(user)
+                .name(req.getName())
+                .description(req.getDescription())
+                .techStack(req.getTechStack())
+                .url(req.getUrl())
+                .startDate(req.getStartDate())
+                .endDate(req.getEndDate())
+                .build();
+        if (req.getDisplayOrder() != null) entity.setDisplayOrder(req.getDisplayOrder());
+        return toDto(projectRepository.save(entity));
+    }
+
+    public ProjectDto updateProject(UUID userId, UUID projectId, CreateProjectRequest req) {
+        ProjectEntity entity = requireOwned(projectRepository.findById(projectId), userId,
+                "Projet", projectId, p -> p.getUser().getId());
+        entity.setName(req.getName());
+        entity.setDescription(req.getDescription());
+        entity.setTechStack(req.getTechStack());
+        entity.setUrl(req.getUrl());
+        entity.setStartDate(req.getStartDate());
+        entity.setEndDate(req.getEndDate());
+        if (req.getDisplayOrder() != null) entity.setDisplayOrder(req.getDisplayOrder());
+        return toDto(projectRepository.save(entity));
+    }
+
+    public void deleteProject(UUID userId, UUID projectId) {
+        ProjectEntity entity = requireOwned(projectRepository.findById(projectId), userId,
+                "Projet", projectId, p -> p.getUser().getId());
+        projectRepository.delete(entity);
+    }
+
+    // =====================================================
     // Helpers : ownership, agrégation, mapping
     // =====================================================
 
@@ -361,6 +404,8 @@ public class ProfileService {
                 .findByUserIdOrderByDisplayOrderAsc(userId).stream().map(this::toDto).toList();
         List<CertificationDto> certifications = certificationRepository
                 .findByUserIdOrderByDisplayOrderAsc(userId).stream().map(this::toDto).toList();
+        List<ProjectDto> projects = projectRepository
+                .findByUserId(userId).stream().map(this::toDto).toList();
 
         return UserProfileDto.builder()
                 .id(profile.getId())
@@ -380,6 +425,7 @@ public class ProfileService {
                 .skills(skills)
                 .languages(languages)
                 .certifications(certifications)
+                .projects(projects)
                 .build();
     }
 
@@ -427,5 +473,12 @@ public class ProfileService {
                 .credentialUrl(c.getCredentialUrl()).displayOrder(c.getDisplayOrder())
                 .createdAt(c.getCreatedAt()).updatedAt(c.getUpdatedAt())
                 .build();
+    }
+
+    private ProjectDto toDto(ProjectEntity p) {
+        return new ProjectDto(
+                p.getId(), p.getName(), p.getDescription(), p.getTechStack(),
+                p.getUrl(), p.getStartDate(), p.getEndDate(),
+                p.getDisplayOrder(), p.getCreatedAt(), p.getUpdatedAt());
     }
 }

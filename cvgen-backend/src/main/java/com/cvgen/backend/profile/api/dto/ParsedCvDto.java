@@ -31,4 +31,15 @@ public class ParsedCvDto {
 
     /** Langues parlées détectées avec leur niveau. */
     private List<CreateLanguageRequest> languages;
+
+    /** Certifications professionnelles détectées. */
+    private List<CreateCertificationRequest> certifications;
+
+    /**
+     * Projets techniques/personnels détectés.
+     *
+     * <p>Non persistés actuellement (pas d'entité ProjectEntity en base) :
+     * exposés uniquement pour la prévisualisation frontend.</p>
+     */
+    private List<ParsedProjectDto> projects;
 }

@@ -22,9 +22,10 @@ public class SelectedCvContent {
     private String title;          // Titre réécrit
     private String summary;        // Bio optimisée
 
-    // Éléments sélectionnés par Gemini (max 4 exp, 12 skills, 2 projets, 1 formation)
+    // Éléments sélectionnés par Gemini (max 4 exp, 12 skills, 2 projets, toutes les formations)
     private List<SelectedExperienceDto> experiences;
     private List<SelectedEducationDto> educations;
+    private List<SelectedProjectDto> projects;
     private List<SelectedSkillDto> skills;
     private List<SelectedLanguageDto> languages;
     private List<SelectedCertificationDto> certifications;

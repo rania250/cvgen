@@ -5,6 +5,7 @@ import type {
   CreateEducationRequest,
   CreateExperienceRequest,
   CreateLanguageRequest,
+  CreateProjectRequest,
   CreateSkillRequest,
   UpdateProfileRequest,
   UserProfileDto,
@@ -117,6 +118,21 @@ export function useProfileMutations() {
     onSuccess: invalidate,
   });
 
+  // --- Projects ---
+  const addProject = useMutation({
+    mutationFn: (payload: CreateProjectRequest) => profileApi.addProject(payload),
+    onSuccess: invalidate,
+  });
+  const updateProject = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: CreateProjectRequest }) =>
+      profileApi.updateProject(id, payload),
+    onSuccess: invalidate,
+  });
+  const deleteProject = useMutation({
+    mutationFn: (id: string) => profileApi.deleteProject(id),
+    onSuccess: invalidate,
+  });
+
   return {
     updateProfile,
     addExperience,
@@ -134,5 +150,8 @@ export function useProfileMutations() {
     addCertification,
     updateCertification,
     deleteCertification,
+    addProject,
+    updateProject,
+    deleteProject,
   };
 }

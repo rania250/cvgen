@@ -110,6 +110,29 @@ export interface CreateCertificationRequest {
 }
 
 // --- Profil agrégé ---
+export interface ProjectDto {
+  id: string;
+  name: string;
+  description?: string | null;
+  techStack?: string | null;
+  url?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  displayOrder?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  description?: string;
+  techStack?: string;
+  url?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  displayOrder?: number;
+}
+
 export interface UserProfileDto {
   id: string;
   userId: string;
@@ -128,6 +151,7 @@ export interface UserProfileDto {
   skills: SkillDto[];
   languages: LanguageDto[];
   certifications: CertificationDto[];
+  projects: ProjectDto[];
 }
 
 export interface UpdateProfileRequest {
@@ -142,10 +166,21 @@ export interface UpdateProfileRequest {
 }
 
 // --- Import de CV parsé ---
+export interface ParsedProjectDto {
+  name: string;
+  description?: string | null;
+  techStack?: string | null;
+  url?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
 export interface ParsedCvDto {
   profileInfo: UpdateProfileRequest;
   experiences: CreateExperienceRequest[];
   educations: CreateEducationRequest[];
   skills: CreateSkillRequest[];
   languages: CreateLanguageRequest[];
+  certifications: CreateCertificationRequest[];
+  projects: ParsedProjectDto[];
 }

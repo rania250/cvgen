@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -13,12 +13,17 @@ import {
   Wrench,
   CheckCircle2,
   AlertCircle,
+  FolderKanban,
 } from 'lucide-react';
 import Logo from '@/components/ui/Logo';
 import Button from '@/components/ui/Button';
-import { useGenerateCv } from '@/hooks/useGeneration';
+import { useGenerateCv, useExportPdf } from '@/hooks/useGeneration';
+import { useAnalyzeAts } from '@/hooks/useAts';
 import { useAuthStore } from '@/store/authStore';
+import AtsScore from '@/components/generation/AtsScore';
+import { buildCvText } from '@/utils/cvTextBuilder';
 import type { SelectedCvContent } from '@/types/generation.types';
+import type { AtsScore as AtsScoreData } from '@/types/ats.types';
 
 // Helper : format YYYY-MM-DD → "MM/YYYY"
 function fmtDate(iso?: string | null): string {
@@ -48,22 +53,56 @@ export default function GenerateCvPage() {
   const { user } = useAuthStore();
   const [jobOfferText, setJobOfferText] = useState('');
   const [generatedCv, setGeneratedCv] = useState<SelectedCvContent | null>(null);
+  const [atsScore, setAtsScore] = useState<AtsScoreData | null>(null);
 
   const generateMutation = useGenerateCv();
+  const exportPdfMutation = useExportPdf();
+  const analyzeAtsMutation = useAnalyzeAts();
 
   const handleGenerate = async () => {
     if (!jobOfferText.trim()) return;
+    setAtsScore(null);
+    setGeneratedCv(null);
     try {
       const result = await generateMutation.mutateAsync({ jobOfferText });
       setGeneratedCv(result);
-    } catch (error) {
+    } catch {
       // Error handled by mutation
     }
   };
 
-  const handleDownloadPdf = () => {
-    // Placeholder pour la génération PDF
-    alert('Génération PDF à venir...');
+  useEffect(() => {
+    if (!generatedCv || !jobOfferText.trim()) return;
+
+    const cvText = buildCvText(generatedCv);
+    analyzeAtsMutation.mutate(
+      { cvText, offerText: jobOfferText },
+      { onSuccess: (data) => setAtsScore(data) },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generatedCv?.generatedCvId]);
+
+  const handleDownloadPdf = async () => {
+    if (!generatedCv?.generatedCvId) return;
+
+    try {
+      const blob = await exportPdfMutation.mutateAsync({
+        generatedCvId: generatedCv.generatedCvId,
+        templateId: 'template1',
+      });
+
+      // Créer un URL pour le blob et télécharger
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CV_${user?.firstName}_${user?.lastName}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur lors du téléchargement PDF:', error);
+    }
   };
 
   return (
@@ -137,16 +176,49 @@ export default function GenerateCvPage() {
           )}
         </section>
 
-        {/* Prévisualisation du CV généré */}
+        {generateMutation.isPending && (
+          <section className="mb-8 rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-neutral-500">
+              <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+              <p className="font-medium text-neutral-700">Génération de votre CV optimisé...</p>
+            </div>
+          </section>
+        )}
+
         {generatedCv && (
-          <section className="rounded-2xl border border-neutral-200 bg-white p-6">
+          <>
+            {analyzeAtsMutation.isPending && (
+              <section className="mb-8 rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
+                <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-neutral-500">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+                  <p className="font-medium text-neutral-700">Analyse ATS en cours...</p>
+                  <p className="text-xs text-neutral-400">
+                    Évaluation de la correspondance avec l&apos;offre d&apos;emploi
+                  </p>
+                </div>
+              </section>
+            )}
+            {analyzeAtsMutation.isError && (
+              <div className="mb-8 flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                L&apos;analyse ATS a échoué. Le CV reste disponible ci-dessous.
+              </div>
+            )}
+            {atsScore && (
+              <div className="mb-8">
+                <AtsScore data={atsScore} />
+              </div>
+            )}
+
+            {(atsScore || analyzeAtsMutation.isError) && (
+            <section className="rounded-2xl border border-neutral-200 bg-white p-6">
             <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                   <CheckCircle2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-neutral-900">CV généré avec succès</h2>
+                  <h2 className="text-lg font-semibold text-neutral-900">Votre CV optimisé</h2>
                   <p className="text-xs text-neutral-500">
                     Généré le {new Date(generatedCv.createdAt).toLocaleDateString('fr-FR')}
                   </p>
@@ -155,9 +227,16 @@ export default function GenerateCvPage() {
               <Button
                 variant="primary"
                 onClick={handleDownloadPdf}
-                leftIcon={<Download className="h-4 w-4" />}
+                disabled={exportPdfMutation.isPending}
+                leftIcon={
+                  exportPdfMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )
+                }
               >
-                Télécharger PDF
+                {exportPdfMutation.isPending ? 'Génération PDF...' : 'Télécharger PDF'}
               </Button>
             </div>
 
@@ -208,12 +287,52 @@ export default function GenerateCvPage() {
                     </div>
                   )}
 
+                  {/* Projets */}
+                  {generatedCv.projects?.length > 0 && (
+                    <div>
+                      <h4 className="mb-3 flex items-center gap-2 font-semibold text-neutral-900">
+                        <FolderKanban className="h-4 w-4 text-primary-600" />
+                        Projets
+                      </h4>
+                      <ul className="space-y-4">
+                        {generatedCv.projects.map((project, idx) => (
+                          <li key={idx} className="border-l-2 border-primary-200 pl-4">
+                            <p className="font-medium text-neutral-900">{project.name}</p>
+                            {project.techStack && (
+                              <p className="text-xs font-medium text-primary-600">{project.techStack}</p>
+                            )}
+                            {(project.startDate || project.endDate) && (
+                              <p className="text-xs text-neutral-400">
+                                {fmtDate(project.startDate)} — {fmtDate(project.endDate)}
+                              </p>
+                            )}
+                            {project.description && (
+                              <p className="mt-1 whitespace-pre-line text-sm text-neutral-700">
+                                {project.description}
+                              </p>
+                            )}
+                            {project.url && (
+                              <a
+                                href={project.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-1 inline-block text-xs text-primary-600 hover:underline"
+                              >
+                                Voir le projet
+                              </a>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   {/* Formations */}
                   {generatedCv.educations.length > 0 && (
                     <div>
                       <h4 className="mb-3 flex items-center gap-2 font-semibold text-neutral-900">
                         <GraduationCap className="h-4 w-4 text-primary-600" />
-                        Formation
+                        Formations
                       </h4>
                       <ul className="space-y-3">
                         {generatedCv.educations.map((edu, idx) => (
@@ -299,7 +418,10 @@ export default function GenerateCvPage() {
                 </div>
               </div>
             </div>
+
           </section>
+            )}
+          </>
         )}
       </main>
     </div>

@@ -106,6 +106,27 @@ public class CvImportController {
         return ResponseEntity.ok(ApiResponse.success("Profil importé avec succès", updated));
     }
 
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Import complet d'un CV en une étape (parse + apply)",
+            description = "Parse le fichier et applique immédiatement les données au profil. "
+                    + "Alternative au flux 2 étapes quand le frontend ne renvoie pas tous les champs."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "CV importé et profil mis à jour"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "Fichier vide, corrompu ou parsing échoué")
+    })
+    public ResponseEntity<ApiResponse<UserProfileDto>> importCv(
+            Authentication auth,
+            @RequestParam("file") MultipartFile file) {
+        UUID userId = currentUserId(auth);
+        ParsedCvDto parsed = cvImportService.extractAndParse(file);
+        UserProfileDto updated = importApplicationService.applyParsedCv(userId, parsed);
+        return ResponseEntity.ok(ApiResponse.success("CV importé avec succès", updated));
+    }
+
     /**
      * Résout l'UUID de l'utilisateur courant à partir de l'email contenu dans
      * le JWT (porté par {@link Authentication#getName()}).

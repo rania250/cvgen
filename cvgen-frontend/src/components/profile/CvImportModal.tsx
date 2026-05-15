@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileUp, Loader2, Check, ChevronRight, Briefcase, GraduationCap, Wrench, Languages, User } from 'lucide-react';
+import { FileUp, Loader2, Check, ChevronRight, Briefcase, GraduationCap, Wrench, Languages, User, Award, FolderGit2 } from 'lucide-react';
 import { profileApi } from '@/api/profileApi';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -10,6 +10,8 @@ import type {
   CreateEducationRequest,
   CreateSkillRequest,
   CreateLanguageRequest,
+  CreateCertificationRequest,
+  ParsedProjectDto,
   UpdateProfileRequest,
 } from '@/types/profile.types';
 
@@ -32,6 +34,8 @@ export default function CvImportModal({ open, onClose, onSuccess }: CvImportModa
   const [selectedEducations, setSelectedEducations] = useState<Set<number>>(new Set());
   const [selectedSkills, setSelectedSkills] = useState<Set<number>>(new Set());
   const [selectedLanguages, setSelectedLanguages] = useState<Set<number>>(new Set());
+  const [selectedCertifications, setSelectedCertifications] = useState<Set<number>>(new Set());
+  const [selectedProjects, setSelectedProjects] = useState<Set<number>>(new Set());
 
   // Editable data states
   const [profileInfo, setProfileInfo] = useState<UpdateProfileRequest>({});
@@ -39,6 +43,8 @@ export default function CvImportModal({ open, onClose, onSuccess }: CvImportModa
   const [educations, setEducations] = useState<CreateEducationRequest[]>([]);
   const [skills, setSkills] = useState<CreateSkillRequest[]>([]);
   const [languages, setLanguages] = useState<CreateLanguageRequest[]>([]);
+  const [certifications, setCertifications] = useState<CreateCertificationRequest[]>([]);
+  const [projects, setProjects] = useState<ParsedProjectDto[]>([]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -87,12 +93,16 @@ export default function CvImportModal({ open, onClose, onSuccess }: CvImportModa
       setEducations(result.educations || []);
       setSkills(result.skills || []);
       setLanguages(result.languages || []);
+      setCertifications(result.certifications || []);
+      setProjects(result.projects || []);
 
       // Select all by default
       setSelectedExperiences(new Set((result.experiences || []).map((_, i) => i)));
       setSelectedEducations(new Set((result.educations || []).map((_, i) => i)));
       setSelectedSkills(new Set((result.skills || []).map((_, i) => i)));
       setSelectedLanguages(new Set((result.languages || []).map((_, i) => i)));
+      setSelectedCertifications(new Set((result.certifications || []).map((_, i) => i)));
+      setSelectedProjects(new Set((result.projects || []).map((_, i) => i)));
 
       setStep('preview');
     } catch (err) {
@@ -123,6 +133,20 @@ export default function CvImportModal({ open, onClose, onSuccess }: CvImportModa
           startDate: cleanDate(edu.startDate as string | undefined),
           endDate: cleanDate(edu.endDate as string | undefined),
         }));
+      const cleanCertifications = certifications
+        .filter((_, i) => selectedCertifications.has(i))
+        .map(cert => ({
+          ...cert,
+          issueDate: cleanDate(cert.issueDate as string | undefined),
+          expiryDate: cleanDate(cert.expiryDate as string | undefined),
+        }));
+      const cleanProjects = projects
+        .filter((_, i) => selectedProjects.has(i))
+        .map(proj => ({
+          ...proj,
+          startDate: cleanDate(proj.startDate as string | undefined),
+          endDate: cleanDate(proj.endDate as string | undefined),
+        }));
 
       const dtoToApply: ParsedCvDto = {
         profileInfo,
@@ -130,6 +154,8 @@ export default function CvImportModal({ open, onClose, onSuccess }: CvImportModa
         educations: cleanEducations,
         skills: skills.filter((_, i) => selectedSkills.has(i)),
         languages: languages.filter((_, i) => selectedLanguages.has(i)),
+        certifications: cleanCertifications,
+        projects: cleanProjects,
       };
 
       await profileApi.applyCv(dtoToApply);
@@ -567,6 +593,115 @@ export default function CvImportModal({ open, onClose, onSuccess }: CvImportModa
           </div>
         </div>
       )}
+
+      {/* Certifications Section */}
+      {certifications.length > 0 && (
+        <div className="border border-neutral-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Award className="h-5 w-5 text-primary-600" />
+              <h3 className="font-semibold text-neutral-900">
+                Certifications détectées ({certifications.length})
+              </h3>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => selectAll(certifications.length, setSelectedCertifications)}
+                className="text-xs text-primary-600 hover:text-primary-700"
+              >
+                Tout sélectionner
+              </button>
+              <span className="text-neutral-300">|</span>
+              <button
+                onClick={() => deselectAll(setSelectedCertifications)}
+                className="text-xs text-neutral-500 hover:text-neutral-700"
+              >
+                Aucune
+              </button>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {certifications.map((cert, index) => (
+              <div
+                key={index}
+                className={`p-3 rounded-lg border transition-all ${
+                  selectedCertifications.has(index)
+                    ? 'border-primary-200 bg-primary-50'
+                    : 'border-neutral-200 bg-white opacity-60'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedCertifications.has(index)}
+                    onChange={() => toggleSelection(selectedCertifications, index, setSelectedCertifications)}
+                    className="mt-1 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <p className="font-medium text-neutral-900">{cert.name}</p>
+                    {cert.issuer && <p className="text-sm text-neutral-600">{cert.issuer}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Projects Section */}
+      {projects.length > 0 && (
+        <div className="border border-neutral-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <FolderGit2 className="h-5 w-5 text-primary-600" />
+              <h3 className="font-semibold text-neutral-900">
+                Projets détectés ({projects.length})
+              </h3>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => selectAll(projects.length, setSelectedProjects)}
+                className="text-xs text-primary-600 hover:text-primary-700"
+              >
+                Tout sélectionner
+              </button>
+              <span className="text-neutral-300">|</span>
+              <button
+                onClick={() => deselectAll(setSelectedProjects)}
+                className="text-xs text-neutral-500 hover:text-neutral-700"
+              >
+                Aucun
+              </button>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {projects.map((proj, index) => (
+              <div
+                key={index}
+                className={`p-3 rounded-lg border transition-all ${
+                  selectedProjects.has(index)
+                    ? 'border-primary-200 bg-primary-50'
+                    : 'border-neutral-200 bg-white opacity-60'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedProjects.has(index)}
+                    onChange={() => toggleSelection(selectedProjects, index, setSelectedProjects)}
+                    className="mt-1 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <p className="font-medium text-neutral-900">{proj.name}</p>
+                    {proj.techStack && <p className="text-sm text-neutral-600">{proj.techStack}</p>}
+                    {proj.description && <p className="text-sm text-neutral-700">{proj.description}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -614,6 +749,8 @@ export default function CvImportModal({ open, onClose, onSuccess }: CvImportModa
         selectedEducations.size > 0 ||
         selectedSkills.size > 0 ||
         selectedLanguages.size > 0 ||
+        selectedCertifications.size > 0 ||
+        selectedProjects.size > 0 ||
         Object.values(profileInfo).some(v => v && String(v).trim() !== '');
 
       return (

@@ -5,6 +5,7 @@ import {
   Award,
   Briefcase,
   ExternalLink,
+  FolderGit2,
   Github,
   GraduationCap,
   Languages as LangIcon,
@@ -30,6 +31,7 @@ import EducationForm from '@/components/profile/EducationForm';
 import SkillForm from '@/components/profile/SkillForm';
 import LanguageForm from '@/components/profile/LanguageForm';
 import CertificationForm from '@/components/profile/CertificationForm';
+import ProjectForm from '@/components/profile/ProjectForm';
 import CvImportModal from '@/components/profile/CvImportModal';
 import { useGetProfile, useProfileMutations, PROFILE_QUERY_KEY } from '@/hooks/useProfile';
 import { useQueryClient } from '@tanstack/react-query';
@@ -41,6 +43,7 @@ import type {
   EducationDto,
   ExperienceDto,
   LanguageDto,
+  ProjectDto,
   SkillDto,
   UpdateProfileRequest,
 } from '@/types/profile.types';
@@ -59,6 +62,7 @@ type ModalState =
   | { kind: 'skill'; data?: SkillDto }
   | { kind: 'language'; data?: LanguageDto }
   | { kind: 'certification'; data?: CertificationDto }
+  | { kind: 'project'; data?: ProjectDto }
   | null;
 
 export default function ProfilePage() {
@@ -305,6 +309,56 @@ export default function ProfilePage() {
           )}
         </Section>
 
+        <Section
+          icon={<FolderGit2 className="h-5 w-5" />}
+          title="Projets"
+          onAdd={() => setModal({ kind: 'project' })}
+        >
+          {profile.projects.length === 0 ? (
+            <EmptyHint message="Aucun projet renseigné." />
+          ) : (
+            <ul className="space-y-3">
+              {profile.projects.map((p) => (
+                <li
+                  key={p.id}
+                  className="rounded-xl border border-neutral-200 bg-white p-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-neutral-900">{p.name}</p>
+                      {p.techStack && (
+                        <p className="text-sm text-neutral-600">{p.techStack}</p>
+                      )}
+                      {p.description && (
+                        <p className="mt-1 whitespace-pre-line text-sm text-neutral-700">
+                          {p.description}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-neutral-400">
+                        {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
+                      </p>
+                      {p.url && (
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+                        >
+                          Voir le projet <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                    <RowActions
+                      onEdit={() => setModal({ kind: 'project', data: p })}
+                      onDelete={() => m.deleteProject.mutate(p.id)}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
         <CvImportSection onOpen={() => setImportModalOpen(true)} />
       </main>
 
@@ -439,6 +493,29 @@ export default function ProfilePage() {
                 await m.updateCertification.mutateAsync({ id: modal.data.id, payload });
               } else {
                 await m.addCertification.mutateAsync(payload);
+              }
+              close();
+            }}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={modal?.kind === 'project'}
+        onClose={close}
+        title={modal?.kind === 'project' && modal.data ? 'Modifier le projet' : 'Ajouter un projet'}
+        size="lg"
+      >
+        {modal?.kind === 'project' && (
+          <ProjectForm
+            initial={modal.data}
+            onCancel={close}
+            submitting={m.addProject.isPending || m.updateProject.isPending}
+            onSubmit={async (payload) => {
+              if (modal.data) {
+                await m.updateProject.mutateAsync({ id: modal.data.id, payload });
+              } else {
+                await m.addProject.mutateAsync(payload);
               }
               close();
             }}

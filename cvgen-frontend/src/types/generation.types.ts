@@ -20,6 +20,15 @@ export interface SelectedEducation {
   endDate?: string; // ISO YYYY-MM-DD
 }
 
+export interface SelectedProject {
+  name: string;
+  description?: string;
+  techStack?: string;
+  url?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
 export interface SelectedSkill {
   name: string;
   level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT';
@@ -43,6 +52,7 @@ export interface SelectedCvContent {
   summary?: string;
   experiences: SelectedExperience[];
   educations: SelectedEducation[];
+  projects?: SelectedProject[];
   skills: SelectedSkill[];
   languages: SelectedLanguage[];
   certifications: SelectedCertification[];

@@ -8,7 +8,7 @@ spring:
     name: cvgen-backend
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/cvgen}
+    url: jdbc:postgresql://localhost:5432/cvgen
     username: ${DB_USERNAME:cvgen}
     password: ${DB_PASSWORD:cvgen}
     driver-class-name: org.postgresql.Driver
@@ -49,7 +49,7 @@ jwt:
 
 # --- Configuration Gemini API (mappée sur GeminiProperties) ---
 gemini:
-  api-key: AIzaSyBTJRGvaQqDkD51ceZusUWscBbb2peDcDQ
+  api-key: ${GEMINI_API_KEY:}
   api-url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com}
   model: ${GEMINI_MODEL:gemini-2.5-flash}
 

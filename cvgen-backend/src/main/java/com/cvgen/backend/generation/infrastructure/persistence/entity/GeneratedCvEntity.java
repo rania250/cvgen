@@ -51,6 +51,10 @@ public class GeneratedCvEntity {
     private String educations;  // JSON array
 
     @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "projects", columnDefinition = "jsonb")
+    private String projects;    // JSON array
+
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "skills", columnDefinition = "jsonb")
     private String skills;      // JSON array
 

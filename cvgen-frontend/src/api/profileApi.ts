@@ -5,11 +5,13 @@ import type {
   CreateEducationRequest,
   CreateExperienceRequest,
   CreateLanguageRequest,
+  CreateProjectRequest,
   CreateSkillRequest,
   EducationDto,
   ExperienceDto,
   LanguageDto,
   ParsedCvDto,
+  ProjectDto,
   SkillDto,
   UpdateProfileRequest,
   UserProfileDto,
@@ -148,6 +150,28 @@ export const profileApi = {
   },
   deleteCertification: async (id: string): Promise<void> => {
     await axiosInstance.delete(`${BASE}/certifications/${id}`);
+  },
+
+  // --- Projects ---
+  addProject: async (payload: CreateProjectRequest): Promise<ProjectDto> => {
+    const { data } = await axiosInstance.post<ApiEnvelope<ProjectDto>>(
+      `${BASE}/projects`,
+      payload,
+    );
+    return unwrap(data);
+  },
+  updateProject: async (
+    id: string,
+    payload: CreateProjectRequest,
+  ): Promise<ProjectDto> => {
+    const { data } = await axiosInstance.put<ApiEnvelope<ProjectDto>>(
+      `${BASE}/projects/${id}`,
+      payload,
+    );
+    return unwrap(data);
+  },
+  deleteProject: async (id: string): Promise<void> => {
+    await axiosInstance.delete(`${BASE}/projects/${id}`);
   },
 
   // --- Import CV (2-step flow: parse then apply) ---

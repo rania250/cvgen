@@ -1,9 +1,12 @@
 package com.cvgen.backend.generation.api;
 
 import com.cvgen.backend.auth.infrastructure.persistence.UserJpaRepository;
+import com.cvgen.backend.generation.api.dto.ExportPdfRequest;
 import com.cvgen.backend.generation.api.dto.GenerateCvRequest;
 import com.cvgen.backend.generation.api.dto.SelectedCvContent;
 import com.cvgen.backend.generation.application.GenerationService;
+import com.cvgen.backend.generation.application.LatexTemplateService;
+import com.cvgen.backend.generation.application.TectonicPdfCompiler;
 import com.cvgen.backend.shared.exception.ResourceNotFoundException;
 import com.cvgen.backend.shared.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,14 +14,15 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -32,6 +36,8 @@ import java.util.UUID;
 public class GenerationController {
 
     private final GenerationService generationService;
+    private final LatexTemplateService latexTemplateService;
+    private final TectonicPdfCompiler pdfCompiler;
     private final UserJpaRepository userRepository;
 
     @PostMapping("/generate")
@@ -43,6 +49,37 @@ public class GenerationController {
         SelectedCvContent result = generationService.generateCv(userId, request.getJobOfferText());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("CV généré avec succès", result));
+    }
+
+    @PostMapping("/{id}/export-pdf")
+    @Operation(summary = "Exporte un CV généré au format PDF")
+    public ResponseEntity<byte[]> exportPdf(
+            Authentication auth,
+            @PathVariable("id") UUID generatedCvId,
+            @Valid @RequestBody ExportPdfRequest request) {
+        UUID userId = currentUserId(auth);
+
+        // Générer le LaTeX
+        String latexContent = latexTemplateService.generateLatex(userId, generatedCvId, request.getTemplateId());
+
+        // Compiler en PDF
+        String baseFileName = "CV_" + userId.toString().substring(0, 8);
+        byte[] pdfBytes = pdfCompiler.compile(latexContent, baseFileName);
+
+        // Construire le nom de fichier
+        String fileName = String.format("CV_%s_%s.pdf",
+                userId.toString().substring(0, 8),
+                LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")));
+
+        // Retourner le PDF avec les headers appropriés
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", fileName);
+        headers.setContentLength(pdfBytes.length);
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(pdfBytes);
     }
 
     /**
