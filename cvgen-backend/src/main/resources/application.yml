@@ -8,7 +8,7 @@ spring:
     name: cvgen-backend
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/cvgen}
+    url: jdbc:postgresql://localhost:5432/cvgen
     username: ${DB_USERNAME:cvgen}
     password: ${DB_PASSWORD:cvgen}
     driver-class-name: org.postgresql.Driver
@@ -28,6 +28,13 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  # --- Upload de fichiers (import CV) ---
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
 server:
   port: 8080
   error:
@@ -39,6 +46,12 @@ jwt:
   secret: ${JWT_SECRET:change_me_in_production_min_32_chars}
   access-token-expiration: 900000        # 15 minutes (ms)
   refresh-token-expiration: 604800000    # 7 jours (ms)
+
+# --- Configuration Gemini API (mappée sur GeminiProperties) ---
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  api-url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com}
+  model: ${GEMINI_MODEL:gemini-2.5-flash}
 
 # --- Actuator : seul /health public, le reste protégé par Spring Security ---
 management:

@@ -26,7 +26,7 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, GeminiProperties.class})
 public class SecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {

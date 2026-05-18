@@ -29,6 +29,10 @@
         <lombok.version>1.18.32</lombok.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <springdoc.version>2.3.0</springdoc.version>
+        <pdfbox.version>3.0.1</pdfbox.version>
+        <poi.version>5.2.5</poi.version>
+        <commons-io.version>2.15.1</commons-io.version>
+        <dotenv.version>1.0.0</dotenv.version>
     </properties>
 
     <dependencies>
@@ -115,6 +119,25 @@
         </dependency>
 
         <!-- ============================================== -->
+        <!-- Extraction de texte CV (PDF / DOCX)             -->
+        <!-- ============================================== -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>${commons-io.version}</version>
+        </dependency>
+
+        <!-- ============================================== -->
         <!-- Tests                                           -->
         <!-- ============================================== -->
         <dependency>
@@ -126,6 +149,15 @@
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- .env auto-loading for IDE runs                  -->
+        <!-- ============================================== -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>spring-dotenv</artifactId>
+            <version>4.0.0</version>
         </dependency>
     </dependencies>
 
@@ -142,6 +174,24 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Plugin Dotenv : charge les variables d'environnement depuis .env -->
+            <plugin>
+                <groupId>io.github.cdimascio</groupId>
+                <artifactId>dotenv-maven-plugin</artifactId>
+                <version>${dotenv.version}</version>
+                <executions>
+                    <execution>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>dotenv</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <dotenvFile>../.env</dotenvFile>
                 </configuration>
             </plugin>
 

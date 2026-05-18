@@ -14,14 +14,27 @@ COPY src ./src
 RUN mvn -B clean package -DskipTests
 
 # =====================================================
-# Stage 2 : Runtime - image légère JRE Alpine
+# Stage 2 : Runtime - image avec JRE et Tectonic
 # =====================================================
-FROM eclipse-temurin:17-jre-alpine AS runtime
+FROM eclipse-temurin:17-jre AS runtime
 
 WORKDIR /app
 
+# Installation de Tectonic et dépendances
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    ca-certificates \
+    && wget https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.14.1/tectonic-0.14.1-x86_64-unknown-linux-gnu.tar.gz \
+    && tar -xzf tectonic-*.tar.gz \
+    && mv tectonic /usr/local/bin/ \
+    && rm tectonic-*.tar.gz \
+    && apt-get remove -y wget \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Utilisateur non-root pour la sécurité
-RUN addgroup -S cvgen && adduser -S cvgen -G cvgen
+RUN groupadd -r cvgen && useradd -r -g cvgen cvgen
 
 # Copie du JAR depuis le builder
 COPY --from=builder /build/target/*.jar app.jar
