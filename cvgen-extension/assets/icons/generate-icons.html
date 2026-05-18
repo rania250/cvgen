@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Générer les icônes CVGen</title>
+  <style>
+    body { font-family: system-ui; padding: 24px; background: #f8fafc; color: #1e293b; }
+    h2 { margin-bottom: 8px; }
+    p  { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+    .canvases { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; }
+    .canvas-box { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #64748b; }
+    button {
+      padding: 10px 20px; background: #3B82F6; color: white; border: none;
+      border-radius: 6px; font-size: 14px; cursor: pointer; font-family: inherit;
+    }
+    button:hover { background: #2563eb; }
+    .instructions { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 13px; line-height: 1.6; }
+    code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<h2>Générateur d'icônes CVGen</h2>
+<p>Cliquez sur "Télécharger toutes les icônes" puis placez les fichiers dans <code>assets/icons/</code>.</p>
+
+<div class="canvases" id="canvases"></div>
+
+<button onclick="downloadAll()">⬇️ Télécharger toutes les icônes</button>
+
+<br><br>
+
+<div class="instructions">
+  <strong>Instructions :</strong>
+  <ol style="margin-top:8px;padding-left:18px">
+    <li>Ouvrez ce fichier dans Chrome (<kbd>Ctrl+O</kbd> ou glisser-déposer).</li>
+    <li>Cliquez sur "Télécharger toutes les icônes".</li>
+    <li>Déplacez les 4 fichiers PNG téléchargés dans le dossier <code>cvgen-extension/assets/icons/</code>.</li>
+    <li>Chargez l'extension dans <code>chrome://extensions</code> → "Charger l'extension non empaquetée".</li>
+  </ol>
+</div>
+
+<script>
+  const SIZES = [16, 32, 48, 128];
+
+  const canvases = {};
+
+  function drawIcon(size) {
+    const canvas = document.createElement('canvas');
+    canvas.width  = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const radius = size * 0.18;
+
+    // Fond arrondi bleu marine
+    ctx.fillStyle = '#1B2A4A';
+    roundRect(ctx, 0, 0, size, size, radius);
+    ctx.fill();
+
+    // Bande accent bleue en haut
+    ctx.fillStyle = '#3B82F6';
+    roundRect(ctx, 0, 0, size, size * 0.28, radius);
+    ctx.fill();
+    // Carré en bas à droite pour fermer la bande
+    ctx.fillRect(0, size * 0.14, size, size * 0.14);
+
+    // Texte "CV"
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${Math.round(size * 0.42)}px Inter, Arial, sans-serif`;
+    ctx.fillText('CV', size / 2, size * 0.62);
+
+    return canvas;
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function init() {
+    const container = document.getElementById('canvases');
+    SIZES.forEach(function(size) {
+      const canvas = drawIcon(size);
+      canvases[size] = canvas;
+      const box = document.createElement('div');
+      box.className = 'canvas-box';
+      box.appendChild(canvas);
+      const label = document.createElement('span');
+      label.textContent = size + 'px';
+      box.appendChild(label);
+      container.appendChild(box);
+    });
+  }
+
+  function downloadAll() {
+    SIZES.forEach(function(size) {
+      const canvas = canvases[size];
+      const link = document.createElement('a');
+      link.download = 'icon' + size + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+  }
+
+  init();
+</script>
+</body>
+</html>

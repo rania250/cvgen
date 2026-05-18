@@ -1,0 +1,71 @@
+{
+  "manifest_version": 3,
+  "name": "CVGen — Autofill Candidatures",
+  "version": "1.0.0",
+  "description": "Remplissez vos formulaires de candidature automatiquement avec votre profil CVGen.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://fr.indeed.com/*",
+    "https://www.indeed.com/*",
+    "https://www.linkedin.com/*",
+    "https://www.welcometothejungle.com/*",
+    "https://candidat.francetravail.fr/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.workday.com/*",
+    "https://*.successfactors.eu/*",
+    "https://*.successfactors.com/*",
+    "https://*.taleo.net/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://api.cvgen.fr/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "CVGen Autofill",
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "32": "assets/icons/icon32.png",
+      "48": "assets/icons/icon48.png",
+      "128": "assets/icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "32": "assets/icons/icon32.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "utils/logger.js",
+        "utils/storage.js",
+        "content/field-detector.js",
+        "content/field-mapper.js",
+        "content/field-filler.js",
+        "content/dynamic-sections.js",
+        "content/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options/options.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/icons/*.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
