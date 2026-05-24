@@ -749,15 +749,38 @@ function getInputLabel(el) {
  */
 function isSFCombobox(el) {
   if (el.tagName !== "INPUT") return false;
-  if (el.getAttribute("role") !== "combobox") return false;
-  // Indices supplémentaires : aria-owns vers une listbox, ou classe SF
-  var hasAriaOwns = !!el.getAttribute("aria-owns");
+
+  // role=combobox = indice le plus fiable
+  if (el.getAttribute("role") === "combobox") return true;
+
+  // aria-owns/controls vers une listbox
+  if (el.getAttribute("aria-owns") || el.getAttribute("aria-controls")) return true;
+
+  // Classes SF connues
   var classes = el.className || "";
-  var isSFClass =
+  if (
     classes.indexOf("rcmpaginatedselect") !== -1 ||
     classes.indexOf("sfCascadingPicklist") !== -1 ||
-    classes.indexOf("picklist") !== -1;
-  return hasAriaOwns || isSFClass;
+    classes.indexOf("picklist") !== -1
+  ) return true;
+
+  // Bouton voisin _selectButton (SF nomme l'input "X_input" et le bouton "X_selectButton")
+  var id = el.getAttribute("id") || "";
+  if (id) {
+    var btnId = id.replace(/_input$/, "_selectButton");
+    if (btnId !== id && document.getElementById(btnId)) return true;
+  }
+
+  // Ancêtre avec classes picklist/select-container
+  try {
+    var ancestor = el.closest(
+      '[class*="paginatedPicklistContainer"], [class*="picklist"], ' +
+      '[class*="Picklist"], [class*="selectContainer"], [class*="select-container"]'
+    );
+    if (ancestor) return true;
+  } catch (_) {}
+
+  return false;
 }
 
 /**
@@ -788,74 +811,44 @@ async function fillSFCombobox(input, value) {
     try { input.focus(); input.click(); } catch (_) {}
   }
 
-  // 2. Attendre que les options apparaissent (au moins 1 option visible)
-  var listboxId = input.getAttribute("aria-owns") || input.getAttribute("aria-controls");
-  var listbox = null;
-  var maxWait = 2000;
-  var start = Date.now();
-  while (Date.now() - start < maxWait) {
-    if (listboxId) {
-      listbox = document.getElementById(listboxId);
-    }
-    if (!listbox) {
-      listbox = document.querySelector(
-        '[role="listbox"]:not([aria-hidden="true"]), ' +
-        '[class*="dropdown-menu"]:not([style*="display: none"]):not([style*="display:none"]), ' +
-        '[class*="picklist-popover"]:not([aria-hidden="true"]), ' +
-        '[class*="sfPicklist"]:not([aria-hidden="true"])'
-      );
-    }
-    if (listbox && listbox.querySelector('[role="option"], li, [class*="option"]')) {
-      break;
-    }
-    await new Promise(function (r) { setTimeout(r, 100); });
-  }
+  // 2. Attendre que la listbox apparaisse
+  var listbox = await waitForSFListbox(input, 3500);
   if (!listbox) {
     Logger.warn("fillSFCombobox: listbox introuvable pour " + inputId);
     return false;
   }
 
-  // 3. Trouver l'option qui match
-  var options = Array.from(
-    listbox.querySelectorAll('[role="option"], li, [class*="option"]')
-  ).filter(function (o) {
-    return (o.textContent || "").trim().length > 0;
-  });
-  if (options.length === 0) {
-    Logger.warn("fillSFCombobox: aucune option dans la listbox " + (listbox.id || ""));
-    return false;
-  }
+  var match = findOptionInListbox(listbox, value);
 
-  var normalizedVal = normalize(value);
-  var match = null;
-  // Exact match d'abord
-  for (var i = 0; i < options.length; i++) {
-    if (normalize(options[i].textContent || "") === normalizedVal) {
-      match = options[i];
-      break;
-    }
-  }
-  // Sinon inclusion (option contient value OU value contient option)
+  // 3. Si pas de match dans les options visibles, essayer de TAPER la valeur
+  //    pour déclencher un filtre (cas Country of Education avec pagination).
   if (!match) {
-    for (var k = 0; k < options.length; k++) {
-      var optText = normalize(options[k].textContent || "");
-      if (
-        (optText.length > 2 && normalizedVal.indexOf(optText) !== -1) ||
-        (normalizedVal.length > 2 && optText.indexOf(normalizedVal) !== -1)
-      ) {
-        match = options[k];
-        break;
-      }
-    }
-  }
-  if (!match) {
-    Logger.warn(
-      "fillSFCombobox: aucune option trouvée pour '" + value +
-      "' parmi " + options.length + " options"
+    Logger.log("fillSFCombobox: tentative de filtre par frappe pour '" + value + "'");
+    var typedValue = value.substring(0, Math.min(value.length, 12));
+    execInMainWorld(
+      "(function(){try{" +
+        "var i=document.getElementById(" + jsStringLit(inputId) + ");" +
+        "if(i){" +
+          "i.focus();" +
+          "i.value=" + jsStringLit(typedValue) + ";" +
+          "i.dispatchEvent(new Event('input',{bubbles:true}));" +
+          "i.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,key:'a'}));" +
+          "}}catch(e){console.warn('[CVGen MAIN] type combobox failed',e);}}())"
     );
-    // Fermer le menu pour ne pas bloquer la suite
-    try { document.body.click(); } catch (_) {}
-    return false;
+
+    // Attendre que la listbox se mette à jour avec les options filtrées
+    await new Promise(function (r) { setTimeout(r, 700); });
+    listbox = await waitForSFListbox(input, 2000) || listbox;
+    match = findOptionInListbox(listbox, value);
+
+    if (!match) {
+      Logger.warn(
+        "fillSFCombobox: aucune option trouvée pour '" + value +
+        "' parmi " + countOptions(listbox) + " options (après filtre)"
+      );
+      try { document.body.click(); } catch (_) {}
+      return false;
+    }
   }
 
   // 4. Cliquer l'option (main world)
@@ -869,8 +862,85 @@ async function fillSFCombobox(input, value) {
   }
 
   // Petite pause pour laisser SF traiter
-  await new Promise(function (r) { setTimeout(r, 150); });
+  await new Promise(function (r) { setTimeout(r, 200); });
   return true;
+}
+
+/**
+ * Attend qu'une listbox SF apparaisse (associée à l'input via aria-owns
+ * ou détectée globalement). Renvoie l'élément ou null.
+ */
+async function waitForSFListbox(input, timeoutMs) {
+  var listboxId =
+    input.getAttribute("aria-owns") || input.getAttribute("aria-controls");
+  var start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    var listbox = null;
+    if (listboxId) {
+      listbox = document.getElementById(listboxId);
+    }
+    if (!listbox) {
+      listbox = document.querySelector(
+        '[role="listbox"]:not([aria-hidden="true"]), ' +
+        '[class*="dropdown-menu"]:not([style*="display: none"]):not([style*="display:none"]), ' +
+        '[class*="picklist-popover"]:not([aria-hidden="true"]), ' +
+        '[class*="sfPicklist"]:not([aria-hidden="true"]), ' +
+        'ul[class*="dropdown"]:not([aria-hidden="true"])'
+      );
+    }
+    if (listbox && countOptions(listbox) > 0) {
+      return listbox;
+    }
+    await new Promise(function (r) { setTimeout(r, 100); });
+  }
+  return null;
+}
+
+function countOptions(listbox) {
+  if (!listbox) return 0;
+  return listbox.querySelectorAll(
+    '[role="option"], li[id], li[class*="option"], [class*="picklistoption"]'
+  ).length;
+}
+
+/**
+ * Cherche une option dans la listbox qui match la value (exact puis inclusion).
+ */
+function findOptionInListbox(listbox, value) {
+  if (!listbox) return null;
+  var options = Array.from(
+    listbox.querySelectorAll(
+      '[role="option"], li[id], li[class*="option"], [class*="picklistoption"]'
+    )
+  ).filter(function (o) {
+    return (o.textContent || "").trim().length > 0;
+  });
+  if (options.length === 0) return null;
+
+  var normalizedVal = normalize(value);
+
+  // 1. Exact match
+  for (var i = 0; i < options.length; i++) {
+    if (normalize(options[i].textContent || "") === normalizedVal) {
+      return options[i];
+    }
+  }
+  // 2. Option démarre par value
+  for (var s = 0; s < options.length; s++) {
+    var t = normalize(options[s].textContent || "");
+    if (t.indexOf(normalizedVal) === 0) return options[s];
+  }
+  // 3. Inclusion bidirectionnelle
+  for (var k = 0; k < options.length; k++) {
+    var optText = normalize(options[k].textContent || "");
+    if (
+      (optText.length > 2 && normalizedVal.indexOf(optText) !== -1) ||
+      (normalizedVal.length > 2 && optText.indexOf(normalizedVal) !== -1)
+    ) {
+      return options[k];
+    }
+  }
+  return null;
 }
 
 /**
@@ -917,20 +987,31 @@ function detectSubfieldType(el, subfields) {
   var normalizedCandidates = candidates.map(normalize).filter(Boolean);
   var keys = Object.keys(subfields);
 
+  // Matching par SPÉCIFICITÉ : le keyword le plus LONG gagne (= plus spécifique).
+  // Ex: "s agit il de votre diplome le plus eleve" battra "diplome" pour le
+  // champ "S'agit-il de votre diplôme le plus élevé?".
+  var bestKey = null;
+  var bestScore = 0;
+
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
     var keywords = subfields[key].map(normalize);
     for (var j = 0; j < normalizedCandidates.length; j++) {
       var cand = normalizedCandidates[j];
       for (var k = 0; k < keywords.length; k++) {
-        if (cand === keywords[k] || cand.includes(keywords[k])) {
-          return key;
+        var kw = keywords[k];
+        if (!kw) continue;
+        if (cand === kw || cand.includes(kw)) {
+          if (kw.length > bestScore) {
+            bestScore = kw.length;
+            bestKey = key;
+          }
         }
       }
     }
   }
 
-  return null;
+  return bestKey;
 }
 
 // ─── Remplissage principal des sections dynamiques ───────────────────────────
@@ -1289,10 +1370,12 @@ async function fillFormationSections(profil) {
     var values = {
       nom_formation: form.diplome || form.niveauEtudes || "",
       diplome: form.niveauEtudes || form.diplome || "",
-      diplome_plus_eleve: form.niveauEtudes || form.diplome || "",
+      // SF demande "S'agit-il de votre diplôme le plus élevé ?" → Oui pour la
+      // 1ère entrée (la plus récente / la plus haute), Non pour les suivantes.
+      diplome_plus_eleve: i === 0 ? "Oui" : "Non",
       etablissement: form.etablissement || "",
       annee_obtention: form.annee || form.dateFin || "",
-      domaine: form.mention || "",
+      domaine: form.mention || form.domaine || "",
       country_education: "France",
     };
 
