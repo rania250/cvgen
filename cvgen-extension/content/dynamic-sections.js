@@ -433,59 +433,129 @@ function resolveClickable(el) {
  *
  * @param {Element} el
  */
+/**
+ * Injecte et exécute du code JavaScript dans le MAIN world de la page
+ * (le contexte où vivent les libs custom du site comme juic, jQuery, etc.).
+ * Le content script tourne dans un "isolated world" et n'a pas accès à ces
+ * libs. Pour déclencher onclick="juic.fire(...)", on doit passer par là.
+ *
+ * Limite : si la page a une CSP stricte (`script-src 'self'`), cette
+ * injection est bloquée silencieusement.
+ *
+ * @param {string} code - JS à exécuter, sera évalué dans le main world.
+ */
+function execInMainWorld(code) {
+  try {
+    var script = document.createElement("script");
+    script.textContent = code;
+    (document.head || document.documentElement).appendChild(script);
+    script.remove();
+    return true;
+  } catch (err) {
+    Logger.warn("Injection main world échouée : " + err.message);
+    return false;
+  }
+}
+
+/**
+ * Échappe une chaîne pour insertion sûre dans un littéral string JS.
+ */
+function jsStringLit(s) {
+  return JSON.stringify(String(s == null ? "" : s));
+}
+
 function clickElementRobust(el) {
   if (!el) return;
 
-  // Log de diagnostic : structure interne du wrapper pour comprendre
-  // ce qu'il contient vraiment.
-  var innerHTMLShort = (el.innerHTML || "").replace(/\s+/g, " ").substring(0, 250);
+  var innerHTMLShort = (el.innerHTML || "").replace(/\s+/g, " ").substring(0, 200);
   Logger.log("Structure du bouton : " + innerHTMLShort);
 
   var target = resolveClickable(el);
   if (target !== el) {
     Logger.log(
-      "Clic redirigé du wrapper <" + el.tagName.toLowerCase() +
-      "> vers enfant cliquable <" + target.tagName.toLowerCase() +
+      "Clic redirigé vers <" + target.tagName.toLowerCase() +
       " class='" + (target.className || "").substring(0, 40) + "'>"
     );
-  } else {
-    Logger.log("Pas d'enfant interactif trouvé — clic direct sur le wrapper");
   }
 
-  // ── Stratégie agressive : cliquer le wrapper, l'enfant cliquable,
-  //    ET TOUS les enfants potentiellement interactifs.
-  var clickTargets = [el];
-  if (target !== el) clickTargets.push(target);
-
-  // Ajouter tous les <a>, <button>, [onclick], [role=button] descendants
-  var allChildren = el.querySelectorAll('a, button, input[type="button"], [onclick], [role="button"]');
-  for (var c = 0; c < allChildren.length; c++) {
-    if (clickTargets.indexOf(allChildren[c]) === -1) clickTargets.push(allChildren[c]);
-  }
-  Logger.log("Cibles de clic : " + clickTargets.length + " élément(s)");
-
-  for (var k = 0; k < clickTargets.length; k++) {
-    var t = clickTargets[k];
+  // ── Stratégie A : événements synthétiques (Pointer + Mouse + Touch + Keyboard) ──
+  var commonOpts = { bubbles: true, cancelable: true, view: window };
+  try {
+    target.focus();
     try {
-      t.focus();
-      var commonOpts = { bubbles: true, cancelable: true, view: window };
+      target.dispatchEvent(new PointerEvent("pointerover", commonOpts));
+      target.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
+      target.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
+    } catch (_) {}
+    target.dispatchEvent(new MouseEvent("mouseover", commonOpts));
+    target.dispatchEvent(new MouseEvent("mousedown", commonOpts));
+    target.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
+    target.dispatchEvent(new MouseEvent("click",     commonOpts));
+    if (typeof target.click === "function") target.click();
+
+    // Clavier : SuccessFactors a souvent onkeypress="juic.fire(...)" en plus
+    // d'onclick. Espace et Entrée sont les touches d'activation des [role=button].
+    var keyEvts = [
+      { type: "keydown",  key: "Enter", code: "Enter", keyCode: 13, which: 13 },
+      { type: "keypress", key: "Enter", code: "Enter", keyCode: 13, which: 13 },
+      { type: "keyup",    key: "Enter", code: "Enter", keyCode: 13, which: 13 },
+      { type: "keydown",  key: " ",     code: "Space", keyCode: 32, which: 32 },
+      { type: "keypress", key: " ",     code: "Space", keyCode: 32, which: 32 },
+      { type: "keyup",    key: " ",     code: "Space", keyCode: 32, which: 32 },
+    ];
+    for (var k = 0; k < keyEvts.length; k++) {
       try {
-        t.dispatchEvent(new PointerEvent("pointerover", commonOpts));
-        t.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
-        t.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
-      } catch (_) { /* PointerEvent peut ne pas être dispo */ }
-      t.dispatchEvent(new MouseEvent("mouseover", commonOpts));
-      t.dispatchEvent(new MouseEvent("mousedown", commonOpts));
-      t.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
-      t.dispatchEvent(new MouseEvent("click",     commonOpts));
-      if (typeof t.click === "function") t.click();
-      try {
-        t.dispatchEvent(new Event("touchstart", { bubbles: true }));
-        t.dispatchEvent(new Event("touchend",   { bubbles: true }));
+        var ke = new KeyboardEvent(keyEvts[k].type, {
+          bubbles: true, cancelable: true,
+          key: keyEvts[k].key, code: keyEvts[k].code,
+          keyCode: keyEvts[k].keyCode, which: keyEvts[k].which,
+          view: window,
+        });
+        // keyCode/which sont read-only dans certains navigateurs après création
+        // → forcer via Object.defineProperty si nécessaire
+        try {
+          Object.defineProperty(ke, "keyCode", { get: function () { return keyEvts[k].keyCode; } });
+          Object.defineProperty(ke, "which",   { get: function () { return keyEvts[k].which; } });
+        } catch (_) {}
+        target.dispatchEvent(ke);
       } catch (_) {}
-    } catch (err) {
-      Logger.warn("Clic cible #" + k + " échoué : " + err.message);
     }
+
+    try {
+      target.dispatchEvent(new Event("touchstart", { bubbles: true }));
+      target.dispatchEvent(new Event("touchend",   { bubbles: true }));
+    } catch (_) {}
+  } catch (err) {
+    Logger.warn("Stratégie A (events) a échoué : " + err.message);
+  }
+
+  // ── Stratégie B : main world injection pour SAP/SuccessFactors ──
+  // Si le bouton a un onclick inline qui fait référence à des libs du
+  // main world (juic, sap, etc.), on exécute le clic dans ce contexte.
+  // C'est nécessaire car les events depuis l'isolated world ont
+  // isTrusted=false, ce que juic.fire peut refuser.
+  var onclickAttr = target.getAttribute("onclick") || el.getAttribute("onclick") || "";
+  var btnId = target.id || el.id || "";
+  var needMainWorld =
+    onclickAttr.indexOf("juic") !== -1 ||
+    onclickAttr.indexOf("sap.") !== -1 ||
+    onclickAttr.indexOf("addRow") !== -1;
+
+  if (needMainWorld && btnId) {
+    Logger.log("Stratégie B : exécution dans le main world (juic.fire détecté)");
+    execInMainWorld(
+      "(function(){try{" +
+        "var b=document.getElementById(" + jsStringLit(btnId) + ");" +
+        "if(b){b.focus();b.click();}" +
+      "}catch(e){console.warn('[CVGen MAIN] click failed',e);}}())"
+    );
+  } else if (needMainWorld && !btnId) {
+    // Pas d'id → on essaie d'évaluer le contenu de onclick directement
+    Logger.log("Stratégie B : éval du onclick inline (pas d'id)");
+    execInMainWorld(
+      "(function(){try{(function(event){" + onclickAttr + "})(new MouseEvent('click'));}" +
+      "catch(e){console.warn('[CVGen MAIN] onclick eval failed',e);}}())"
+    );
   }
 }
 
