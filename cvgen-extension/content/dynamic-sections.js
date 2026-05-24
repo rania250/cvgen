@@ -911,9 +911,21 @@ function isSFCombobox(el) {
 // des autres champs. Reset à chaque nouvel appel de remplissage.
 var SF_COMBOBOX_FAILURES = 0;
 var SF_COMBOBOX_DISABLED = false;
+var SF_UNFILLED_FIELDS = []; // pour highlight final
 function resetSFComboboxState() {
   SF_COMBOBOX_FAILURES = 0;
   SF_COMBOBOX_DISABLED = false;
+  SF_UNFILLED_FIELDS = [];
+}
+
+/**
+ * Liste publique des champs SF qui n'ont pas pu être remplis automatiquement
+ * (comboboxes filtrées par isTrusted). Utilisé en fin de remplissage pour
+ * highlighter visuellement les champs à compléter à la main.
+ * @returns {Element[]}
+ */
+function getSFUnfilledFields() {
+  return SF_UNFILLED_FIELDS.slice();
 }
 
 async function fillSFCombobox(input, value) {
@@ -938,6 +950,7 @@ async function fillSFCombobox(input, value) {
   }
 
   if (SF_COMBOBOX_DISABLED) {
+    if (SF_UNFILLED_FIELDS.indexOf(input) === -1) SF_UNFILLED_FIELDS.push(input);
     return false;
   }
 
@@ -958,6 +971,7 @@ async function fillSFCombobox(input, value) {
     } else {
       Logger.warn("fillSFCombobox: listbox introuvable pour " + inputId);
     }
+    if (SF_UNFILLED_FIELDS.indexOf(input) === -1) SF_UNFILLED_FIELDS.push(input);
     return false;
   }
   // Succès d'ouverture → reset le compteur

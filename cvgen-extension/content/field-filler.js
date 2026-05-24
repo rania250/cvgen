@@ -1158,7 +1158,9 @@ function showFieldFeedback(element) {
  * @param {number} filledCount  - Nombre de champs effectivement remplis
  * @param {number} totalCount   - Nombre total de champs détectés
  */
-function showCompletionToast(filledCount, totalCount) {
+function showCompletionToast(filledCount, totalCount, unfilledManualCount) {
+  unfilledManualCount = unfilledManualCount || 0;
+
   // Supprimer un toast existant
   var existing = document.getElementById("cvgen-toast");
   if (existing) existing.remove();
@@ -1181,19 +1183,22 @@ function showCompletionToast(filledCount, totalCount) {
   }
 
   var icon = filledCount > 0 ? "✅" : "⚠️";
-  var message =
-    filledCount > 0
-      ? "<strong>" +
-        filledCount +
-        "</strong> champ" +
-        (filledCount > 1 ? "s" : "") +
-        " rempli" +
-        (filledCount > 1 ? "s" : "") +
-        " sur <strong>" +
-        totalCount +
-        "</strong> détecté" +
-        (totalCount > 1 ? "s" : "")
-      : "Aucun champ CVGen reconnu sur cette page";
+  var message;
+  if (filledCount > 0) {
+    message =
+      "<strong>" + filledCount + "</strong> champ" +
+      (filledCount > 1 ? "s" : "") + " rempli" +
+      (filledCount > 1 ? "s" : "") + " sur <strong>" + totalCount +
+      "</strong> détecté" + (totalCount > 1 ? "s" : "");
+    if (unfilledManualCount > 0) {
+      message +=
+        '<br><span style="color:#FFB84D;font-size:12px">' +
+        "⚠️ " + unfilledManualCount + " liste(s) déroulante(s) SuccessFactors " +
+        "à compléter à la main (surlignées en orange)</span>";
+    }
+  } else {
+    message = "Aucun champ CVGen reconnu sur cette page";
+  }
 
   var toast = document.createElement("div");
   toast.id = "cvgen-toast";
@@ -1229,10 +1234,79 @@ function showCompletionToast(filledCount, totalCount) {
 
   document.body.appendChild(toast);
 
+  // Si on a des champs SF à remplir manuellement, garder le toast plus longtemps
+  var displayDuration = unfilledManualCount > 0 ? 8000 : 4000;
+
   setTimeout(function () {
     toast.style.animation = "cvgenSlideOut 0.3s ease forwards";
     setTimeout(function () {
       toast.remove();
     }, 300);
-  }, 4000);
+  }, displayDuration);
+}
+
+/**
+ * Highlight visuel des champs combobox SuccessFactors qui n'ont pas pu être
+ * remplis (limitation isTrusted). Ajoute une bordure orange clignotante et
+ * scrolle jusqu'au premier pour que l'utilisateur sache exactement quoi
+ * remplir manuellement.
+ *
+ * @param {Element[]} fields
+ */
+function highlightUnfilledFields(fields) {
+  if (!fields || fields.length === 0) return;
+
+  // Injecter le style d'animation (une seule fois)
+  if (!document.getElementById("cvgen-highlight-style")) {
+    var style = document.createElement("style");
+    style.id = "cvgen-highlight-style";
+    style.textContent = [
+      "@keyframes cvgenPulseOrange {",
+      "  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.9); }",
+      "  50%     { box-shadow: 0 0 0 6px rgba(255, 152, 0, 0.25); }",
+      "}",
+      ".cvgen-needs-manual-fill {",
+      "  outline: 2px solid #FF9800 !important;",
+      "  outline-offset: 1px !important;",
+      "  background-color: rgba(255, 152, 0, 0.08) !important;",
+      "  animation: cvgenPulseOrange 1.8s ease-in-out infinite !important;",
+      "  border-radius: 3px !important;",
+      "}",
+    ].join("");
+    document.head.appendChild(style);
+  }
+
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    if (!f || !f.classList) continue;
+    f.classList.add("cvgen-needs-manual-fill");
+    // Highlight aussi le container parent (utile sur SF où l'input est dans une div picklist)
+    var parent =
+      f.closest('[class*="rcmFormField"]') ||
+      f.closest('[class*="picklist"]') ||
+      f.parentElement;
+    if (parent && parent.classList) {
+      parent.classList.add("cvgen-needs-manual-fill");
+    }
+  }
+
+  // Scroll vers le premier champ pour que l'utilisateur le voie immédiatement
+  try {
+    var first = fields[0];
+    first.scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (_) {}
+
+  // Retirer le highlight après 30 secondes (laisse le temps à l'utilisateur)
+  setTimeout(function () {
+    for (var j = 0; j < fields.length; j++) {
+      try {
+        fields[j].classList.remove("cvgen-needs-manual-fill");
+        var p =
+          fields[j].closest('[class*="rcmFormField"]') ||
+          fields[j].closest('[class*="picklist"]') ||
+          fields[j].parentElement;
+        if (p && p.classList) p.classList.remove("cvgen-needs-manual-fill");
+      } catch (_) {}
+    }
+  }, 30000);
 }

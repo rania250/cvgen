@@ -747,14 +747,26 @@
     }
 
     var totalFilled = filled + expFilled + formFilled + certFilled + langFilled + filesFilled;
+
+    // Highlight visuel des champs SF non remplis (limitation isTrusted)
+    var unfilledSF = (typeof getSFUnfilledFields === "function") ? getSFUnfilledFields() : [];
+    if (unfilledSF.length > 0) {
+      highlightUnfilledFields(unfilledSF);
+      Logger.log(
+        unfilledSF.length + " champ(s) combobox SF nécessitent un remplissage manuel " +
+        "(limitation SuccessFactors isTrusted). Surlignés en orange."
+      );
+    }
+
     if (showToast) {
-      showCompletionToast(totalFilled, visibleInputs.length);
+      showCompletionToast(totalFilled, visibleInputs.length, unfilledSF.length);
     }
     Logger.log(
       "Terminé: " + filled + " standards + " +
         expFilled + " exp + " + formFilled + " form + " +
         certFilled + " cert + " + langFilled + " lang + " +
-        filesFilled + " fichiers, " + skipped + " ignorés",
+        filesFilled + " fichiers, " + skipped + " ignorés" +
+        (unfilledSF.length > 0 ? " (" + unfilledSF.length + " champ(s) SF à remplir manuellement)" : ""),
     );
 
     return {
