@@ -794,28 +794,52 @@ function isSFCombobox(el) {
  * @param {string} value
  * @returns {Promise<boolean>} true si une option a été cliquée
  */
+// Circuit breaker : si la listbox SF ne s'ouvre jamais après plusieurs
+// tentatives, on arrête d'essayer pour ne pas ralentir le remplissage
+// des autres champs. Reset à chaque nouvel appel de remplissage.
+var SF_COMBOBOX_FAILURES = 0;
+var SF_COMBOBOX_DISABLED = false;
+function resetSFComboboxState() {
+  SF_COMBOBOX_FAILURES = 0;
+  SF_COMBOBOX_DISABLED = false;
+}
+
 async function fillSFCombobox(input, value) {
   if (!input || !value) return false;
   var inputId = input.getAttribute("id");
   if (!inputId) return false;
 
-  // 1. Ouvrir le menu via plusieurs stratégies (la 1ère qui marche suffit)
-  await openSFCombobox(input);
-
-  // 2. Attendre que la listbox apparaisse
-  var listbox = await waitForSFListbox(input, 3500);
-  if (!listbox) {
-    Logger.warn("fillSFCombobox: listbox introuvable pour " + inputId);
-    debugLogVisibleDropdowns();
+  if (SF_COMBOBOX_DISABLED) {
     return false;
   }
 
+  // 1. Ouvrir le menu via plusieurs stratégies
+  await openSFCombobox(input);
+
+  // 2. Attendre que la listbox apparaisse (timeout court pour rester rapide)
+  var listbox = await waitForSFListbox(input, 800);
+  if (!listbox) {
+    SF_COMBOBOX_FAILURES++;
+    if (SF_COMBOBOX_FAILURES >= 3) {
+      Logger.warn(
+        "fillSFCombobox: 3 échecs consécutifs — désactivation des comboboxes SF " +
+        "(événements probablement filtrés par isTrusted). Ces champs devront être " +
+        "remplis manuellement."
+      );
+      SF_COMBOBOX_DISABLED = true;
+    } else {
+      Logger.warn("fillSFCombobox: listbox introuvable pour " + inputId);
+    }
+    return false;
+  }
+  // Succès d'ouverture → reset le compteur
+  SF_COMBOBOX_FAILURES = 0;
+
   var match = findOptionInListbox(listbox, value);
 
-  // 3. Si pas de match dans les options visibles, essayer de TAPER la valeur
-  //    pour déclencher un filtre (cas Country of Education avec pagination).
+  // 3. Si pas de match dans les options visibles, essayer de filtrer en tapant
   if (!match) {
-    Logger.log("fillSFCombobox: tentative de filtre par frappe pour '" + value + "'");
+    Logger.log("fillSFCombobox: tentative filtre par frappe pour '" + value + "'");
     var typedValue = value.substring(0, Math.min(value.length, 12));
     execInMainWorld(
       "(function(){try{" +
@@ -824,19 +848,16 @@ async function fillSFCombobox(input, value) {
           "i.focus();" +
           "i.value=" + jsStringLit(typedValue) + ";" +
           "i.dispatchEvent(new Event('input',{bubbles:true}));" +
-          "i.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,key:'a'}));" +
+          "i.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,key:'a',keyCode:65}));" +
           "}}catch(e){console.warn('[CVGen MAIN] type combobox failed',e);}}())"
     );
-
-    // Attendre que la listbox se mette à jour avec les options filtrées
-    await new Promise(function (r) { setTimeout(r, 700); });
-    listbox = await waitForSFListbox(input, 2000) || listbox;
+    await new Promise(function (r) { setTimeout(r, 500); });
+    listbox = (await waitForSFListbox(input, 1000)) || listbox;
     match = findOptionInListbox(listbox, value);
-
     if (!match) {
       Logger.warn(
-        "fillSFCombobox: aucune option trouvée pour '" + value +
-        "' parmi " + countOptions(listbox) + " options (après filtre)"
+        "fillSFCombobox: aucune option pour '" + value +
+        "' parmi " + countOptions(listbox) + " (après filtre)"
       );
       try { document.body.click(); } catch (_) {}
       return false;
@@ -853,8 +874,7 @@ async function fillSFCombobox(input, value) {
     try { match.click(); } catch (_) {}
   }
 
-  // Petite pause pour laisser SF traiter
-  await new Promise(function (r) { setTimeout(r, 200); });
+  await new Promise(function (r) { setTimeout(r, 150); });
   return true;
 }
 
@@ -872,87 +892,52 @@ async function fillSFCombobox(input, value) {
 async function openSFCombobox(input) {
   var inputId = input.getAttribute("id") || "";
   var onclickAttr = input.getAttribute("onclick") || "";
+  var onkeydownAttr = input.getAttribute("onkeydown") || "";
   var btnId = inputId ? inputId.replace(/_input$/, "_selectButton") : "";
   var btnEl = btnId && btnId !== inputId ? document.getElementById(btnId) : null;
   var btnOnclick = btnEl ? (btnEl.getAttribute("onclick") || "") : "";
 
-  // Stratégie 1 : eval onclick attribute du bouton (priorité) puis de l'input
-  var onclickToEval = btnOnclick || onclickAttr;
-  if (onclickToEval && (onclickToEval.indexOf("juic") !== -1 || onclickToEval.indexOf("sap.") !== -1)) {
-    Logger.log("openSFCombobox: eval onclick='" + onclickToEval.substring(0, 80) + "'");
-    execInMainWorld(
-      "(function(){try{" +
-        "var event=new MouseEvent('click',{bubbles:true,cancelable:true,view:window});" +
-        "(function(event){" + onclickToEval + "})(event);" +
-      "}catch(e){console.warn('[CVGen MAIN] eval combobox onclick failed',e);}}())"
-    );
-    await new Promise(function (r) { setTimeout(r, 100); });
-    return;
-  }
+  if (!inputId) return;
 
-  // Stratégie 2 : click main world sur button
-  if (btnEl && btnId) {
-    execInMainWorld(
-      "(function(){try{var b=document.getElementById(" + jsStringLit(btnId) + ");" +
-      "if(b){b.focus();b.click();}}catch(e){console.warn('[CVGen MAIN] click button failed',e);}}())"
-    );
-    await new Promise(function (r) { setTimeout(r, 100); });
-    return;
-  }
+  // Stratégie combinée : exécutée dans le main world en un seul payload pour
+  // éviter les délais de plusieurs round-trips. On essaie successivement :
+  //  (a) eval onclick du _selectButton voisin
+  //  (b) eval onclick de l'input
+  //  (c) dispatch ArrowDown (les comboboxes ARIA accessibles s'ouvrent souvent
+  //      ainsi, et SF a typiquement onkeydown="juic.fire(...)")
+  //  (d) eval onkeydown directement
+  //  (e) .focus() + .click() sur le button puis l'input
+  Logger.log("openSFCombobox: tentative pour " + inputId);
+  var script =
+    "(function(){try{" +
+      "var input = document.getElementById(" + jsStringLit(inputId) + ");" +
+      "if(!input) return;" +
+      "input.focus();" +
+      (btnId && btnEl
+        ? "var btn = document.getElementById(" + jsStringLit(btnId) + ");" +
+          (btnOnclick
+            ? "try{(function(event){" + btnOnclick + "})(new MouseEvent('click',{bubbles:true}));}catch(_){}"
+            : "") +
+          "try{btn&&btn.click();}catch(_){}"
+        : "") +
+      // ArrowDown au cas où SF écoute keydown pour ouvrir
+      "try{var kd=new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:'ArrowDown',code:'ArrowDown',keyCode:40,which:40});" +
+        "Object.defineProperty(kd,'keyCode',{get:function(){return 40;}});" +
+        "Object.defineProperty(kd,'which',{get:function(){return 40;}});" +
+        "input.dispatchEvent(kd);}catch(_){}" +
+      // Eval onkeydown si présent
+      (onkeydownAttr
+        ? "try{(function(event){" + onkeydownAttr + "})(new KeyboardEvent('keydown',{bubbles:true,key:'ArrowDown',keyCode:40}));}catch(_){}"
+        : "") +
+      // Eval onclick de l'input
+      (onclickAttr
+        ? "try{(function(event){" + onclickAttr + "})(new MouseEvent('click',{bubbles:true}));}catch(_){}"
+        : "") +
+      "try{input.click();}catch(_){}" +
+    "}catch(e){console.warn('[CVGen MAIN] openSFCombobox failed',e);}}())";
 
-  // Stratégie 3 : click main world sur l'input
-  if (inputId) {
-    execInMainWorld(
-      "(function(){try{var i=document.getElementById(" + jsStringLit(inputId) + ");" +
-      "if(i){i.focus();i.click();}}catch(e){console.warn('[CVGen MAIN] click input failed',e);}}())"
-    );
-    await new Promise(function (r) { setTimeout(r, 100); });
-  }
-
-  // Stratégie 4 (fallback) : events dans l'isolated world
-  try {
-    input.focus();
-    var opts = { bubbles: true, cancelable: true, view: window };
-    input.dispatchEvent(new MouseEvent("mousedown", opts));
-    input.dispatchEvent(new MouseEvent("mouseup", opts));
-    input.dispatchEvent(new MouseEvent("click", opts));
-  } catch (_) {}
-}
-
-/**
- * Log de debug : liste les éléments visibles qui ressemblent à des
- * dropdowns/popovers dans le body, pour aider à identifier où SF place
- * sa listbox.
- */
-function debugLogVisibleDropdowns() {
-  var candidates = document.querySelectorAll(
-    '[role="listbox"], [role="grid"], [role="dialog"], [role="menu"], ' +
-    '[class*="dropdown"], [class*="Dropdown"], ' +
-    '[class*="picklist"], [class*="Picklist"], ' +
-    '[class*="popover"], [class*="Popover"], ' +
-    '[class*="popup"], [class*="Popup"], ' +
-    '[class*="menu"], [class*="Menu"]'
-  );
-  var visible = [];
-  for (var i = 0; i < candidates.length; i++) {
-    var c = candidates[i];
-    var hidden =
-      c.getAttribute("aria-hidden") === "true" ||
-      c.style.display === "none" ||
-      c.style.visibility === "hidden" ||
-      c.offsetParent === null;
-    if (!hidden) visible.push(c);
-  }
-  Logger.log("debugLogVisibleDropdowns: " + visible.length + " candidat(s) visible(s)");
-  for (var j = 0; j < Math.min(visible.length, 8); j++) {
-    var v = visible[j];
-    Logger.log(
-      "  → " + v.tagName.toLowerCase() +
-      " id='" + (v.id || "") + "'" +
-      " role='" + (v.getAttribute("role") || "") + "'" +
-      " class='" + (v.className || "").substring(0, 80) + "'"
-    );
-  }
+  execInMainWorld(script);
+  await new Promise(function (r) { setTimeout(r, 80); });
 }
 
 /**
@@ -1115,6 +1100,8 @@ function detectSubfieldType(el, subfields) {
 async function fillExperienceSections(profil) {
   var experiences = profil.experiences || [];
   if (experiences.length === 0) return 0;
+
+  resetSFComboboxState();
 
   // Sanity check : ne jamais créer plus de 10 entrées (anti-boucle si données corrompues)
   if (experiences.length > 10) {
@@ -1399,6 +1386,8 @@ function findAllDynamicContainers(sectionEl) {
 async function fillFormationSections(profil) {
   var formations = profil.formations || [];
   if (formations.length === 0) return 0;
+
+  resetSFComboboxState();
 
   // Sanity check anti-boucle
   if (formations.length > 10) {
