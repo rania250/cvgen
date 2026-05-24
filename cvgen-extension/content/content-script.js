@@ -235,8 +235,8 @@
 
     Logger.log(
       "Profil chargé — " +
-        (rawProfil.experiences ? rawProfil.experiences.length : 0) + " exp, " +
-        (rawProfil.educations ? rawProfil.educations.length : 0) + " formations"
+        (profil.experiences ? profil.experiences.length : 0) + " exp, " +
+        (profil.formations ? profil.formations.length : 0) + " formations"
     );
     Logger.debug("API brut — clés: " + Object.keys(rawProfil).join(", "));
 

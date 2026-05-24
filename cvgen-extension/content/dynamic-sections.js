@@ -408,6 +408,41 @@ function findAddButton(sectionEl) {
 }
 
 /**
+ * Clic robuste compatible SuccessFactors / Taleo / Workday.
+ * Dispatche toute la séquence Pointer + Mouse + native .click() pour
+ * que les boutons custom (juic.fire de SF, onclick legacy, etc.) réagissent.
+ *
+ * @param {Element} el
+ */
+function clickElementRobust(el) {
+  try {
+    el.focus();
+    var commonOpts = { bubbles: true, cancelable: true, view: window };
+    // Pointer Events (SF moderne, Workday)
+    try {
+      el.dispatchEvent(new PointerEvent("pointerover", commonOpts));
+      el.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
+      el.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
+    } catch (_) { /* PointerEvent peut ne pas être dispo */ }
+    // Mouse Events classiques
+    el.dispatchEvent(new MouseEvent("mouseover", commonOpts));
+    el.dispatchEvent(new MouseEvent("mousedown", commonOpts));
+    el.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
+    el.dispatchEvent(new MouseEvent("click",     commonOpts));
+    // Click natif (déclenche onclick="" inline)
+    if (typeof el.click === "function") el.click();
+    // Touch (pour les sites mobile-first)
+    try {
+      el.dispatchEvent(new Event("touchstart", { bubbles: true }));
+      el.dispatchEvent(new Event("touchend",   { bubbles: true }));
+    } catch (_) {}
+  } catch (err) {
+    Logger.warn("clickElementRobust a échoué : " + err.message);
+    try { el.click(); } catch (_) {}
+  }
+}
+
+/**
  * Après avoir cliqué sur "Ajouter", attend que de nouveaux champs apparaissent.
  * Combine : (1) MutationObserver pour réagir dès qu'un input est ajouté,
  *           (2) timeout de sécurité, (3) attente minimale pour laisser l'animation finir.
@@ -612,16 +647,20 @@ async function fillExperienceSections(profil) {
       }
 
       var beforeCount = findAllDynamicContainers(sectionEl).length;
-      Logger.debug("Clic Ajouter exp (#" + (i + 1) + "): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
-      addBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-      addBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-      addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      addBtn.click();
-      await waitForNewFields(2500);
+      Logger.log(
+        "Clic Ajouter exp #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
+        " class='" + (addBtn.className || "").substring(0, 60) + "'> texte='" +
+        (addBtn.innerText || addBtn.value || addBtn.title || "").substring(0, 40) + "'"
+      );
+      clickElementRobust(addBtn);
+      await waitForNewFields(3500); // SF est lent
 
       var afterContainers = findAllDynamicContainers(sectionEl);
       if (afterContainers.length <= beforeCount) {
-        Logger.warn("Clic Ajouter n'a créé aucune nouvelle entrée — arrêt");
+        Logger.warn(
+          "Clic Ajouter n'a créé aucune nouvelle entrée — arrêt (avant=" +
+          beforeCount + ", après=" + afterContainers.length + ")"
+        );
         break;
       }
       container = afterContainers[afterContainers.length - 1];
@@ -762,16 +801,20 @@ async function fillFormationSections(profil) {
       }
 
       var beforeCount = findAllDynamicContainers(sectionEl).length;
-      Logger.debug("Clic Ajouter formation (#" + (i + 1) + "): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
-      addBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-      addBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-      addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      addBtn.click();
-      await waitForNewFields(2500);
+      Logger.log(
+        "Clic Ajouter formation #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
+        " class='" + (addBtn.className || "").substring(0, 60) + "'> texte='" +
+        (addBtn.innerText || addBtn.value || addBtn.title || "").substring(0, 40) + "'"
+      );
+      clickElementRobust(addBtn);
+      await waitForNewFields(3500);
 
       var afterContainers = findAllDynamicContainers(sectionEl);
       if (afterContainers.length <= beforeCount) {
-        Logger.warn("Clic Ajouter formation n'a créé aucune nouvelle entrée — arrêt");
+        Logger.warn(
+          "Clic Ajouter formation n'a créé aucune nouvelle entrée — arrêt (avant=" +
+          beforeCount + ", après=" + afterContainers.length + ")"
+        );
         break;
       }
       container = afterContainers[afterContainers.length - 1];
