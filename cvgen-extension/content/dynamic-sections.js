@@ -651,37 +651,226 @@ async function fillSubfields(container, subfields, values) {
   var filled = 0;
   var DATE_KEYS = ["date_debut", "date_fin", "annee_obtention"];
 
+  Logger.log("fillSubfields : " + inputs.length + " input(s) détecté(s) dans le container");
+
   for (var i = 0; i < inputs.length; i++) {
     var el = inputs[i];
-    if (shouldIgnore(el)) continue;
+    var inputLabel = getInputLabel(el);
+    var role = el.getAttribute("role") || "";
+    var debugId = "[" + i + "] " + el.tagName.toLowerCase() +
+      (role ? " role=" + role : "") +
+      (el.type ? " type=" + el.type : "") +
+      ' "' + inputLabel.substring(0, 50) + '"';
+
+    if (shouldIgnore(el)) {
+      Logger.log("  " + debugId + " → ignoré (shouldIgnore)");
+      continue;
+    }
 
     var fieldKey = detectSubfieldType(el, subfields);
-    if (!fieldKey || !values[fieldKey]) continue;
+    if (!fieldKey) {
+      Logger.log("  " + debugId + " → aucun fieldKey détecté");
+      continue;
+    }
+    if (!values[fieldKey]) {
+      Logger.log("  " + debugId + " → fieldKey=" + fieldKey + " mais valeur vide");
+      continue;
+    }
 
     var value = values[fieldKey];
+    var strategy;
 
     try {
       if (el.tagName === "SELECT") {
         fillSelectField(el, value);
+        strategy = "fillSelectField";
       } else if (el.tagName === "TEXTAREA") {
         fillTextareaField(el, value);
+        strategy = "fillTextareaField";
+      } else if (isSFCombobox(el)) {
+        var ok = await fillSFCombobox(el, value);
+        strategy = "fillSFCombobox(" + (ok ? "ok" : "ECHEC") + ")";
+        if (!ok) {
+          Logger.log("  " + debugId + " → fieldKey=" + fieldKey + " value=" + value + " → " + strategy);
+          continue;
+        }
       } else if (DATE_KEYS.indexOf(fieldKey) !== -1 || isDateField(el)) {
         if (window.DateHandler) {
           await DateHandler.fill(el, value);
         } else {
           await fillDateField(el, value);
         }
+        strategy = "fillDateField";
       } else {
         fillInputField(el, value);
+        strategy = "fillInputField";
       }
       showFieldFeedback(el);
       filled++;
+      Logger.log("  " + debugId + " → fieldKey=" + fieldKey + " value='" + value + "' → " + strategy);
     } catch (err) {
       Logger.error("Erreur remplissage sous-champ " + fieldKey, err);
     }
   }
 
   return filled;
+}
+
+/**
+ * Récupère le label associé à un input (via for/id, aria-label, placeholder, etc.)
+ * Utilisé pour les logs de debug.
+ * @param {Element} el
+ * @returns {string}
+ */
+function getInputLabel(el) {
+  var id = el.getAttribute("id");
+  if (id) {
+    try {
+      var label = document.querySelector('label[for="' + CSS.escape(id) + '"]');
+      if (label) {
+        var t = (label.innerText || label.textContent || "").trim();
+        if (t) return t;
+      }
+    } catch (_) {}
+  }
+  return (
+    el.getAttribute("aria-label") ||
+    el.getAttribute("placeholder") ||
+    el.getAttribute("name") ||
+    el.getAttribute("title") ||
+    ""
+  ).trim();
+}
+
+/**
+ * Détecte si un input est un combobox SAP/SuccessFactors.
+ * @param {Element} el
+ * @returns {boolean}
+ */
+function isSFCombobox(el) {
+  if (el.tagName !== "INPUT") return false;
+  if (el.getAttribute("role") !== "combobox") return false;
+  // Indices supplémentaires : aria-owns vers une listbox, ou classe SF
+  var hasAriaOwns = !!el.getAttribute("aria-owns");
+  var classes = el.className || "";
+  var isSFClass =
+    classes.indexOf("rcmpaginatedselect") !== -1 ||
+    classes.indexOf("sfCascadingPicklist") !== -1 ||
+    classes.indexOf("picklist") !== -1;
+  return hasAriaOwns || isSFClass;
+}
+
+/**
+ * Remplit un combobox custom SAP/SuccessFactors en :
+ *  1. Cliquant pour ouvrir le menu (via main world car juic.fire)
+ *  2. Attendant que la liste d'options apparaisse
+ *  3. Cherchant l'option qui match la valeur (texte exact ou inclusion)
+ *  4. Cliquant cette option (via main world)
+ *
+ * @param {Element} input
+ * @param {string} value
+ * @returns {Promise<boolean>} true si une option a été cliquée
+ */
+async function fillSFCombobox(input, value) {
+  if (!input || !value) return false;
+  var inputId = input.getAttribute("id");
+  if (!inputId) return false;
+
+  // 1. Ouvrir le menu : SF a souvent un bouton voisin "_selectButton"
+  var openTargetId = inputId.replace(/_input$/, "_selectButton");
+  var openTarget = document.getElementById(openTargetId) || input;
+  if (openTarget.id) {
+    execInMainWorld(
+      "(function(){try{var b=document.getElementById(" + jsStringLit(openTarget.id) + ");" +
+      "if(b){b.focus();b.click();}}catch(e){console.warn('[CVGen MAIN] open combobox failed',e);}}())"
+    );
+  } else {
+    try { input.focus(); input.click(); } catch (_) {}
+  }
+
+  // 2. Attendre que les options apparaissent (au moins 1 option visible)
+  var listboxId = input.getAttribute("aria-owns") || input.getAttribute("aria-controls");
+  var listbox = null;
+  var maxWait = 2000;
+  var start = Date.now();
+  while (Date.now() - start < maxWait) {
+    if (listboxId) {
+      listbox = document.getElementById(listboxId);
+    }
+    if (!listbox) {
+      listbox = document.querySelector(
+        '[role="listbox"]:not([aria-hidden="true"]), ' +
+        '[class*="dropdown-menu"]:not([style*="display: none"]):not([style*="display:none"]), ' +
+        '[class*="picklist-popover"]:not([aria-hidden="true"]), ' +
+        '[class*="sfPicklist"]:not([aria-hidden="true"])'
+      );
+    }
+    if (listbox && listbox.querySelector('[role="option"], li, [class*="option"]')) {
+      break;
+    }
+    await new Promise(function (r) { setTimeout(r, 100); });
+  }
+  if (!listbox) {
+    Logger.warn("fillSFCombobox: listbox introuvable pour " + inputId);
+    return false;
+  }
+
+  // 3. Trouver l'option qui match
+  var options = Array.from(
+    listbox.querySelectorAll('[role="option"], li, [class*="option"]')
+  ).filter(function (o) {
+    return (o.textContent || "").trim().length > 0;
+  });
+  if (options.length === 0) {
+    Logger.warn("fillSFCombobox: aucune option dans la listbox " + (listbox.id || ""));
+    return false;
+  }
+
+  var normalizedVal = normalize(value);
+  var match = null;
+  // Exact match d'abord
+  for (var i = 0; i < options.length; i++) {
+    if (normalize(options[i].textContent || "") === normalizedVal) {
+      match = options[i];
+      break;
+    }
+  }
+  // Sinon inclusion (option contient value OU value contient option)
+  if (!match) {
+    for (var k = 0; k < options.length; k++) {
+      var optText = normalize(options[k].textContent || "");
+      if (
+        (optText.length > 2 && normalizedVal.indexOf(optText) !== -1) ||
+        (normalizedVal.length > 2 && optText.indexOf(normalizedVal) !== -1)
+      ) {
+        match = options[k];
+        break;
+      }
+    }
+  }
+  if (!match) {
+    Logger.warn(
+      "fillSFCombobox: aucune option trouvée pour '" + value +
+      "' parmi " + options.length + " options"
+    );
+    // Fermer le menu pour ne pas bloquer la suite
+    try { document.body.click(); } catch (_) {}
+    return false;
+  }
+
+  // 4. Cliquer l'option (main world)
+  if (match.id) {
+    execInMainWorld(
+      "(function(){try{var o=document.getElementById(" + jsStringLit(match.id) + ");" +
+      "if(o){o.click();}}catch(e){console.warn('[CVGen MAIN] option click failed',e);}}())"
+    );
+  } else {
+    try { match.click(); } catch (_) {}
+  }
+
+  // Petite pause pour laisser SF traiter
+  await new Promise(function (r) { setTimeout(r, 150); });
+  return true;
 }
 
 /**
