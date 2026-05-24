@@ -1,11 +1,20 @@
 # CVGen
 
-**CVGen** est un SaaS francophone de génération de CV intelligents propulsé par l'IA. Plateforme fullstack permettant de créer, optimiser et adapter des CV à chaque offre d'emploi en quelques minutes.
+**CVGen** est un SaaS francophone de génération de CV intelligents propulsé par l'IA. Plateforme fullstack permettant de créer, optimiser et adapter des CV à chaque offre d'emploi en quelques minutes — et de remplir automatiquement les formulaires de candidature en ligne via une extension Chrome.
+
+## Composants du projet
+
+| Composant | Description |
+| --------- | ----------- |
+| `cvgen-backend` | API REST Spring Boot — gestion des profils, auth JWT, génération de CV, scoring ATS |
+| `cvgen-frontend` | Application web React — interface utilisateur pour créer et gérer son profil/CV |
+| `cvgen-extension` | Extension Chrome MV3 — autofill des formulaires de candidature à partir du profil CVGen |
 
 ## Stack technique
 
 - **Backend** : Java 17, Spring Boot 3.2, PostgreSQL 16, Flyway, JJWT, MapStruct, springdoc-openapi
-- **Frontend** : React 18, TypeScript, Vite, Tailwind CSS, React Router, React Query, Zustand, React Hook Form + Zod
+- **Frontend** : React 18, TypeScript, Vite, Tailwind CSS, React Router, Zustand, React Hook Form + Zod
+- **Extension** : Chrome MV3, Vanilla JS (ES2020), Content Scripts, Service Worker
 - **Infra** : Docker Compose (dev), Railway (backend), Vercel (frontend), Supabase (storage)
 - **Architecture** : monolithe modulaire (`auth`, `profile`, `generation`, `ats`, `application`, `shared`) + hexagonale sur `generation` et `ats`
 
@@ -15,6 +24,7 @@
 - **Node.js 20+** et npm
 - **Docker** + Docker Compose
 - **Maven 3.9+** (ou utiliser le wrapper si présent)
+- **Google Chrome** (pour l'extension)
 
 ## Démarrage rapide
 
@@ -30,7 +40,7 @@ cp .env.example .env
 ### 2. Lancer Postgres + Backend via Docker Compose
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 Cela démarre :
@@ -41,10 +51,17 @@ Cela démarre :
 
 ```bash
 cd cvgen-frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
+
+### 4. Installer l'extension Chrome (mode développeur)
+
+1. Ouvrir `chrome://extensions`
+2. Activer le **mode développeur** (bouton en haut à droite)
+3. Cliquer **"Charger l'extension non empaquetée"**
+4. Sélectionner le dossier `cvgen-extension/`
+5. L'extension apparaît dans la barre d'outils Chrome
 
 ## URLs utiles
 
@@ -67,7 +84,7 @@ cvgen/
 │   │   │   ├── api/                # Controllers + DTOs
 │   │   │   ├── application/        # Services / cas d'usage
 │   │   │   └── infrastructure/     # JPA, Spring Security
-│   │   ├── profile/                # Profils utilisateurs (à venir)
+│   │   ├── profile/                # Profils utilisateurs + endpoint /complet
 │   │   ├── generation/             # Génération IA de CV (hexagonal)
 │   │   ├── ats/                    # Scoring ATS (hexagonal)
 │   │   ├── application/            # Suivi de candidatures
@@ -86,20 +103,85 @@ cvgen/
 │       ├── api/                    # axiosInstance + endpoints
 │       ├── components/
 │       │   ├── ui/                 # Button, Input, Logo...
-│       │   └── layout/
+│       │   └── layout/             # Navbar, Footer, AuthLayout
 │       ├── hooks/
 │       ├── pages/
 │       │   ├── auth/               # LoginPage, RegisterPage
-│       │   └── dashboard/
-│       ├── router/                 # Configuration React Router
+│       │   ├── dashboard/          # Tableau de bord
+│       │   └── HomePage.tsx
+│       ├── router/                 # Configuration React Router + RequireAuth
 │       ├── store/                  # Zustand (authStore)
 │       └── types/                  # Types alignés sur les DTOs backend
+│
+├── cvgen-extension/                # Extension Chrome MV3 (Vanilla JS)
+│   ├── manifest.json               # Déclaration MV3 — permissions, content scripts
+│   ├── service-worker.js           # Point d'entrée du background service worker
+│   ├── background/
+│   │   └── service-worker.js       # Logique SW : appels API, cache profil, auth
+│   ├── content/
+│   │   ├── content-script.js       # Orchestrateur : écoute messages popup, lance le fill
+│   │   ├── field-detector.js       # Détection du type de champ (aria, labels, name…)
+│   │   ├── field-mapper.js         # Mapping type de champ → valeur du profil
+│   │   ├── field-filler.js         # Remplissage natif (input, select, custom SF dropdowns)
+│   │   ├── dynamic-sections.js     # Ajout de sections dynamiques (expériences, formations)
+│   │   ├── date-handler.js         # Gestion des champs date (formats multiples)
+│   │   ├── offer-extractor.js      # Extraction de l'offre d'emploi depuis la page
+│   │   └── file-uploader.js        # Upload de CV (PDF/DOCX)
+│   ├── popup/
+│   │   ├── popup.html              # Interface popup
+│   │   ├── popup.js                # Logique popup (connexion, sync profil, fill)
+│   │   └── popup.css
+│   ├── options/
+│   │   ├── options.html            # Page de paramètres (URL API configurable)
+│   │   └── options.js
+│   ├── utils/
+│   │   ├── api-client.js           # apiFetch() avec Bearer token
+│   │   ├── storage.js              # Abstraction chrome.storage.local
+│   │   └── logger.js               # Logger avec préfixe [CVGen]
+│   └── assets/icons/               # Icônes 16/32/48/128px
 │
 ├── .github/workflows/ci.yml        # CI : backend (Maven + Postgres) + frontend (Vite)
 ├── docker-compose.yml              # Postgres + Backend
 ├── .env.example                    # Variables d'environnement (template)
 └── README.md
 ```
+
+## Extension Chrome — Fonctionnement
+
+L'extension se connecte à votre compte CVGen pour récupérer votre profil, puis remplit automatiquement les formulaires de candidature sur les principaux ATS.
+
+### Sites supportés
+
+| ATS / Jobboard | Support |
+| -------------- | ------- |
+| SAP SuccessFactors | ✅ Complet (dropdowns custom inclus) |
+| LinkedIn | ✅ |
+| Indeed | ✅ |
+| Welcome to the Jungle | ✅ |
+| France Travail | ✅ |
+| Greenhouse | ✅ |
+| Lever | ✅ |
+| Workday / MyWorkdayJobs | ✅ |
+| SmartRecruiters | ✅ |
+| iCIMS | ✅ |
+| Taleo | ✅ |
+| Jobvite | ✅ |
+
+### Utilisation
+
+1. Se connecter via le **popup** de l'extension (email + mot de passe CVGen)
+2. Cliquer **"Synchroniser le profil"** pour charger les données depuis l'API
+3. Naviguer vers un formulaire de candidature
+4. Cliquer **"Remplir le formulaire"** — l'extension détecte et remplit tous les champs disponibles
+
+### Données remplies automatiquement
+
+- Identité (prénom, nom, email, téléphone, adresse, nationalité…)
+- Expériences professionnelles (poste, entreprise, dates, description)
+- Formations (diplôme, établissement, niveau, dates)
+- Compétences et langues
+- Liens (LinkedIn, GitHub, portfolio)
+- Lettre de motivation (si générée)
 
 ## Conventions
 
@@ -109,7 +191,9 @@ cvgen/
 - **Code** : anglais — **commentaires** : français
 - **Secrets** : exclusivement via variables d'environnement
 
-## Endpoints d'authentification
+## Endpoints API
+
+### Authentification
 
 | Méthode | Endpoint              | Description                              |
 | ------- | --------------------- | ---------------------------------------- |
@@ -117,7 +201,15 @@ cvgen/
 | POST    | `/api/auth/login`     | Connexion (retourne access + refresh)    |
 | POST    | `/api/auth/refresh`   | Renouvellement de l'access token         |
 
-Tous les autres endpoints requièrent l'en-tête `Authorization: Bearer <accessToken>`.
+### Profil
+
+| Méthode | Endpoint                  | Description                                          |
+| ------- | ------------------------- | ---------------------------------------------------- |
+| GET     | `/api/profile`            | Profil complet (format backend — champs anglais)     |
+| PUT     | `/api/profile`            | Mise à jour du profil                                |
+| GET     | `/api/profile/complet`    | Profil agrégé au format extension (champs français)  |
+
+Tous les endpoints (sauf auth) requièrent l'en-tête `Authorization: Bearer <accessToken>`.
 
 ## Tests
 
