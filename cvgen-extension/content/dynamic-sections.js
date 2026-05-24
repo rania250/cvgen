@@ -925,9 +925,15 @@ async function fillSFCombobox(input, value) {
   // SF a typiquement onblur="juic.fire('X:','_onBlur',event)" qui valide la
   // valeur saisie si elle correspond à une option connue. Pas besoin d'ouvrir
   // le menu — ça contourne le problème isTrusted.
-  var directOk = await trySetSFComboboxDirect(input, value);
-  if (directOk) {
-    Logger.log("fillSFCombobox: valeur acceptée via injection directe pour " + inputId);
+  var directResult = await trySetSFComboboxDirect(input, value);
+  Logger.log(
+    "trySetSFComboboxDirect[" + inputId + "] value='" + value +
+    "' → accepted=" + directResult.accepted +
+    ", currentValue='" + directResult.currentValue + "'" +
+    ", title='" + directResult.currentTitle + "'" +
+    ", aria-invalid='" + directResult.ariaInvalid + "'"
+  );
+  if (directResult.accepted) {
     return true;
   }
 
@@ -1017,7 +1023,9 @@ async function fillSFCombobox(input, value) {
  */
 async function trySetSFComboboxDirect(input, value) {
   var inputId = input.getAttribute("id");
-  if (!inputId) return false;
+  if (!inputId) {
+    return { accepted: false, currentValue: "", currentTitle: "", ariaInvalid: "" };
+  }
 
   var litVal = jsStringLit(value);
   var litId = jsStringLit(inputId);
@@ -1068,7 +1076,12 @@ async function trySetSFComboboxDirect(input, value) {
   var notInvalid = ariaInvalid !== "true";
   var notReverted = currentValue !== "" && currentValue !== placeholder;
 
-  return valueKept && notInvalid && notReverted;
+  return {
+    accepted: valueKept && notInvalid && notReverted,
+    currentValue: currentValue,
+    currentTitle: currentTitle,
+    ariaInvalid: ariaInvalid || "",
+  };
 }
 
 /**
