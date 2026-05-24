@@ -812,6 +812,7 @@ async function fillExperienceSections(profil) {
       }
 
       var beforeSnapshot = snapshotInputs();
+      var beforeCount = beforeSnapshot.size;
       Logger.log(
         "Clic Ajouter exp #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
@@ -819,7 +820,7 @@ async function fillExperienceSections(profil) {
       clickElementRobust(addBtn);
       await waitForNewFields(3500);
 
-      var newContainer = findContainerOfNewInputs(beforeSnapshot);
+      var newContainer = findContainerOfNewInputs(beforeSnapshot, beforeCount);
       if (!newContainer) {
         Logger.warn("Clic Ajouter exp n'a créé aucun nouvel input — arrêt");
         break;
@@ -864,12 +865,23 @@ function snapshotInputs() {
 
 /**
  * Compare le DOM avant/après un clic Ajouter et retourne le container
- * commun qui regroupe les inputs NOUVELLEMENT créés.
+ * qui regroupe les inputs de la NOUVELLE entrée uniquement.
+ *
+ * Stratégie en 2 cas :
+ *  - Cas idéal : tous les anciens inputs ont disparu OU le LCA des nouveaux
+ *    ne contient aucun ancien → on retourne le LCA.
+ *  - Cas re-render (fréquent sur SuccessFactors) : SF re-render toute la
+ *    section, donc TOUS les inputs (anciens + nouveaux) sont "nouveaux" au
+ *    sens de l'identité DOM. Le LCA est alors le container global de la
+ *    section. On regarde dans ce LCA combien d'enfants directs contiennent
+ *    des inputs (= entrées) et on retourne le DERNIER.
  *
  * @param {Set<Element>} beforeSet - snapshot d'avant clic (snapshotInputs())
+ * @param {number} [beforeInputCount] - nombre d'inputs avant clic, sert
+ *        à détecter le re-render quand >0 (anciens disparus + plus de nouveaux).
  * @returns {Element|null}
  */
-function findContainerOfNewInputs(beforeSet) {
+function findContainerOfNewInputs(beforeSet, beforeInputCount) {
   var nowInputs = Array.from(
     document.querySelectorAll('input:not([type="hidden"]), textarea, select')
   );
@@ -877,16 +889,14 @@ function findContainerOfNewInputs(beforeSet) {
 
   if (newInputs.length === 0) return null;
 
-  // Calculer l'ancêtre commun le plus proche (LCA) des nouveaux inputs.
-  // Remonte chaque input jusqu'au <body> et garde l'élément le plus profond
-  // qui est ancêtre de TOUS les nouveaux inputs.
+  // Calcul du LCA (Least Common Ancestor) des nouveaux inputs
   var firstChain = [];
   var node = newInputs[0];
   while (node && node !== document.body) {
     firstChain.push(node);
     node = node.parentElement;
   }
-
+  var lca = null;
   for (var i = 0; i < firstChain.length; i++) {
     var candidate = firstChain[i];
     var containsAll = true;
@@ -896,8 +906,71 @@ function findContainerOfNewInputs(beforeSet) {
         break;
       }
     }
-    if (containsAll) return candidate;
+    if (containsAll) { lca = candidate; break; }
   }
+  if (!lca) return null;
+
+  // Détection re-render : si AVANT le clic on avait déjà des inputs (>0)
+  // et qu'on retrouve plus d'inputs nouveaux que prévu pour 1 seule entrée
+  // (heuristique : > 1.5x la moyenne attendue), c'est un re-render global.
+  // On cherche alors le DERNIER container fils du LCA qui contient des inputs.
+  var seemsRerender =
+    typeof beforeInputCount === "number" &&
+    beforeInputCount > 0 &&
+    newInputs.length >= beforeInputCount * 1.5;
+
+  if (seemsRerender) {
+    Logger.log(
+      "Re-render détecté (avant=" + beforeInputCount + " inputs, nouveaux=" +
+      newInputs.length + ") — on prend la dernière entrée"
+    );
+    var lastEntry = findLastEntryContainer(lca);
+    if (lastEntry) return lastEntry;
+  }
+
+  return lca;
+}
+
+/**
+ * Dans un container parent (typiquement le LCA d'une section), trouve le
+ * DERNIER container fils qui ressemble à une entrée (a des inputs et est
+ * structurellement similaire à ses frères).
+ *
+ * @param {Element} parent
+ * @returns {Element|null}
+ */
+function findLastEntryContainer(parent) {
+  // Stratégie 1 : enfants directs qui contiennent chacun des inputs
+  var directChildrenWithInputs = Array.from(parent.children).filter(function (c) {
+    return c.querySelector('input:not([type="hidden"]), textarea, select') !== null;
+  });
+  if (directChildrenWithInputs.length >= 2) {
+    return directChildrenWithInputs[directChildrenWithInputs.length - 1];
+  }
+
+  // Stratégie 2 : descendants groupés par "entrée" via classes courantes
+  var entryNodes = Array.from(
+    parent.querySelectorAll(
+      '[class*="entry"], [class*="record"], [class*="row"], [class*="item"], ' +
+      '[class*="rcmFormField"], [class*="ftl-record"], [id*="row_"], [id*="_row"]'
+    )
+  ).filter(function (el) {
+    return el.querySelector('input:not([type="hidden"]), textarea, select') !== null;
+  });
+  if (entryNodes.length >= 2) {
+    // Filtrer : ne garder que les entrées qui sont à la même profondeur dans le DOM
+    // (sinon on prend un sous-conteneur d'une autre entrée)
+    var lastEntry = entryNodes[entryNodes.length - 1];
+    // Vérifier que cette "dernière entrée" n'est pas ancêtre des précédentes
+    for (var k = 0; k < entryNodes.length - 1; k++) {
+      if (lastEntry.contains(entryNodes[k])) {
+        // On a remonté trop haut : retourner le précédent
+        return entryNodes[k];
+      }
+    }
+    return lastEntry;
+  }
+
   return null;
 }
 
@@ -1017,6 +1090,7 @@ async function fillFormationSections(profil) {
       }
 
       var beforeSnapshot = snapshotInputs();
+      var beforeCount = beforeSnapshot.size;
       Logger.log(
         "Clic Ajouter formation #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
@@ -1024,7 +1098,7 @@ async function fillFormationSections(profil) {
       clickElementRobust(addBtn);
       await waitForNewFields(3500);
 
-      var newContainer = findContainerOfNewInputs(beforeSnapshot);
+      var newContainer = findContainerOfNewInputs(beforeSnapshot, beforeCount);
       if (!newContainer) {
         Logger.warn("Clic Ajouter formation n'a créé aucun nouvel input — arrêt");
         break;
