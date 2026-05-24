@@ -702,7 +702,7 @@ function clickElementRobust(el) {
  * @returns {Promise<void>}
  */
 function waitForNewFields(timeoutMs, scope) {
-  timeoutMs = timeoutMs || 2500;
+  timeoutMs = timeoutMs || 2000;
   scope = scope || document.body;
 
   return new Promise(function (resolve) {
@@ -712,7 +712,7 @@ function waitForNewFields(timeoutMs, scope) {
 
     var resolved = false;
     var firstChangeAt = 0;
-    var stabilityMs = 500; // attendre que le DOM se stabilise (selects async)
+    var stabilityMs = 250; // attendre que le DOM se stabilise (selects async)
     var stabilityTimer = null;
 
     function finish() {
@@ -721,7 +721,7 @@ function waitForNewFields(timeoutMs, scope) {
       try { observer.disconnect(); } catch (_) {}
       if (stabilityTimer) clearTimeout(stabilityTimer);
       // Petit délai supplémentaire pour les animations CSS et le rendu
-      setTimeout(resolve, 200);
+      setTimeout(resolve, 100);
     }
 
     function scheduleStabilityCheck() {
@@ -933,23 +933,31 @@ async function fillSFCombobox(input, value) {
   var inputId = input.getAttribute("id");
   if (!inputId) return false;
 
+  // Court-circuit immédiat si on sait déjà que SF rejette tout
+  if (SF_COMBOBOX_DISABLED) {
+    if (SF_UNFILLED_FIELDS.indexOf(input) === -1) SF_UNFILLED_FIELDS.push(input);
+    return false;
+  }
+
   // STRATÉGIE 0 (la plus rapide) : injection directe valeur + déclenchement onblur
-  // SF a typiquement onblur="juic.fire('X:','_onBlur',event)" qui valide la
-  // valeur saisie si elle correspond à une option connue. Pas besoin d'ouvrir
-  // le menu — ça contourne le problème isTrusted.
   var directResult = await trySetSFComboboxDirect(input, value);
-  Logger.log(
-    "trySetSFComboboxDirect[" + inputId + "] value='" + value +
-    "' → accepted=" + directResult.accepted +
-    ", currentValue='" + directResult.currentValue + "'" +
-    ", title='" + directResult.currentTitle + "'" +
-    ", aria-invalid='" + directResult.ariaInvalid + "'"
-  );
   if (directResult.accepted) {
+    Logger.log("trySetSFComboboxDirect[" + inputId + "] → accepté");
+    SF_COMBOBOX_FAILURES = 0;
     return true;
   }
 
-  if (SF_COMBOBOX_DISABLED) {
+  // Échec direct : compter aussi pour le circuit breaker
+  // (évite de tester ensuite 33 fois "ouvrir menu" qui échoue tout autant)
+  SF_COMBOBOX_FAILURES++;
+  if (SF_COMBOBOX_FAILURES >= 3) {
+    if (!SF_COMBOBOX_DISABLED) {
+      Logger.warn(
+        "fillSFCombobox: 3 échecs consécutifs (injection rejetée par SF) — " +
+        "désactivation des comboboxes SF. Ces champs devront être remplis manuellement."
+      );
+      SF_COMBOBOX_DISABLED = true;
+    }
     if (SF_UNFILLED_FIELDS.indexOf(input) === -1) SF_UNFILLED_FIELDS.push(input);
     return false;
   }
@@ -1068,8 +1076,8 @@ async function trySetSFComboboxDirect(input, value) {
     "}catch(e){console.warn('[CVGen MAIN] direct set combobox failed',e);}}())"
   );
 
-  // Attendre un peu que SF traite le _onBlur (souvent un appel async pour valider)
-  await new Promise(function (r) { setTimeout(r, 350); });
+  // Attendre que SF traite le _onBlur (court car SF revert très vite quand il refuse)
+  await new Promise(function (r) { setTimeout(r, 120); });
 
   // Vérifier si la valeur a été acceptée par SF
   var currentValue = (input.value || "").trim();
@@ -1372,7 +1380,7 @@ async function fillExperienceSections(profil) {
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
-      await waitForNewFields(5000);
+      await waitForNewFields(2500);
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
@@ -1655,7 +1663,7 @@ async function fillFormationSections(profil) {
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
-      await waitForNewFields(5000);
+      await waitForNewFields(2500);
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
@@ -1743,7 +1751,7 @@ async function fillCertificationSections(profil) {
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
-      await waitForNewFields(5000);
+      await waitForNewFields(2500);
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
@@ -1831,7 +1839,7 @@ async function fillLangueSections(profil) {
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
-      await waitForNewFields(5000);
+      await waitForNewFields(2500);
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
