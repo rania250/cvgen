@@ -87,10 +87,26 @@
       return typeof s === "string" ? s : (s.name || s.nom || s.skill || "");
     }).filter(Boolean);
 
-    // Transformer les langues
+    // Transformer les langues — on garde {nom, niveau} pour les sections dynamiques
+    // (SuccessFactors et autres ATS demandent souvent un niveau séparé).
     var langues = (apiProfil.languages || apiProfil.langues || []).map(function (l) {
-      return typeof l === "string" ? l : (l.name || l.nom || l.language || l.langue || "");
-    }).filter(Boolean);
+      if (typeof l === "string") return { nom: l, niveau: "" };
+      return {
+        nom: l.name || l.nom || l.language || l.langue || "",
+        niveau: l.level || l.niveau || l.proficiency || l.competence || "",
+      };
+    }).filter(function (l) { return l.nom; });
+
+    // Transformer les certifications (si présentes dans l'API)
+    var certifications = (apiProfil.certifications || apiProfil.certificates || []).map(function (c) {
+      if (typeof c === "string") return { nom: c, organisme: "", annee: "" };
+      return {
+        nom: c.name || c.nom || c.title || c.titre || "",
+        organisme: c.issuer || c.organisme || c.organization || c.organisation || "",
+        annee: c.year || c.annee || c.date || "",
+        description: c.description || "",
+      };
+    }).filter(function (c) { return c.nom; });
 
     return {
       identite: identite,
@@ -101,6 +117,7 @@
       formations: formations,
       competences: competences,
       langues: langues,
+      certifications: certifications,
       disponibilite: apiProfil.availability || apiProfil.disponibilite || "",
       pretentionSalariale: apiProfil.expectedSalary || apiProfil.pretentionSalariale || "",
       typeContrat: apiProfil.contractType || apiProfil.typeContrat || "",
@@ -680,12 +697,20 @@
       }
     }
 
-    // 4. Sections dynamiques (Expériences, Formations)
+    // 4. Sections dynamiques (Expériences, Formations, Certifications, Langues)
     var expFilled = 0,
-      formFilled = 0;
+      formFilled = 0,
+      certFilled = 0,
+      langFilled = 0;
     try {
       expFilled = await fillExperienceSections(profil);
       formFilled = await fillFormationSections(profil);
+      if (typeof fillCertificationSections === "function") {
+        certFilled = await fillCertificationSections(profil);
+      }
+      if (typeof fillLangueSections === "function") {
+        langFilled = await fillLangueSections(profil);
+      }
     } catch (dynErr) {
       Logger.warn("Sections dynamiques : " + dynErr.message);
     }
@@ -721,13 +746,14 @@
       }
     }
 
-    var totalFilled = filled + expFilled + formFilled + filesFilled;
+    var totalFilled = filled + expFilled + formFilled + certFilled + langFilled + filesFilled;
     if (showToast) {
       showCompletionToast(totalFilled, visibleInputs.length);
     }
     Logger.log(
       "Terminé: " + filled + " standards + " +
         expFilled + " exp + " + formFilled + " form + " +
+        certFilled + " cert + " + langFilled + " lang + " +
         filesFilled + " fichiers, " + skipped + " ignorés",
     );
 

@@ -23,18 +23,36 @@ var SECTION_PATTERNS = {
     "career history",
   ],
   formation: [
-    "formation",
-    "formations",
     "parcours académique",
     "parcours academique",
-    "formations et certifications",
     "niveau d études",
     "diplôme",
-    "education",
     "educational background",
     "academic background",
-    "qualifications",
     "academic history",
+    "education",
+  ],
+  certification: [
+    "certifications",
+    "formations et certifications",
+    "certification",
+    "certificats",
+    "certificats et formations",
+    "training and certifications",
+    "licenses & certifications",
+    "licenses and certifications",
+    "certifications and licenses",
+    "qualifications",
+  ],
+  langue: [
+    "compétences linguistiques",
+    "competences linguistiques",
+    "langues",
+    "langue",
+    "languages",
+    "language skills",
+    "linguistic skills",
+    "language proficiency",
   ],
 };
 
@@ -267,6 +285,100 @@ var FORMATION_SUBFIELDS = {
     "country of education",
     "pays de formation",
     "pays d education",
+  ],
+};
+
+var CERTIFICATION_SUBFIELDS = {
+  nom_certification: [
+    "nom de la certification",
+    "nom du certificat",
+    "intitule de la certification",
+    "titre",
+    "nom",
+    "certification name",
+    "certificate name",
+    "certification",
+    "name",
+    "title",
+  ],
+  organisme: [
+    "organisme",
+    "organisme délivreur",
+    "organisme delivreur",
+    "organisme certificateur",
+    "issuing organization",
+    "issuing authority",
+    "issuer",
+    "provider",
+    "authority",
+  ],
+  annee: [
+    "année",
+    "annee",
+    "année d obtention",
+    "annee d obtention",
+    "date d obtention",
+    "year",
+    "issue date",
+    "date issued",
+    "completion date",
+  ],
+  description: [
+    "description",
+    "détails",
+    "details",
+    "description de la certification",
+  ],
+};
+
+var LANGUE_SUBFIELDS = {
+  langue: [
+    "langue",
+    "nom de la langue",
+    "language",
+    "language name",
+  ],
+  niveau_parle: [
+    "niveau parlé",
+    "niveau parle",
+    "expression orale",
+    "oral",
+    "spoken",
+    "speaking",
+    "speaking level",
+    "oral proficiency",
+  ],
+  niveau_ecrit: [
+    "niveau écrit",
+    "niveau ecrit",
+    "expression écrite",
+    "expression ecrite",
+    "écrit",
+    "ecrit",
+    "written",
+    "writing",
+    "writing level",
+    "written proficiency",
+  ],
+  niveau_lu: [
+    "niveau lu",
+    "niveau de compréhension",
+    "niveau de comprehension",
+    "compréhension",
+    "comprehension",
+    "lu",
+    "reading",
+    "reading level",
+    "listening",
+  ],
+  niveau: [
+    "niveau",
+    "niveau de maîtrise",
+    "niveau de maitrise",
+    "level",
+    "proficiency",
+    "proficiency level",
+    "language proficiency",
   ],
 };
 
@@ -1463,6 +1575,180 @@ async function fillFormationSections(profil) {
   }
 
   Logger.log(added + " formation(s) traitée(s)");
+  return added;
+}
+
+/**
+ * Remplit les certifications du profil (section "Formations et certifications"
+ * sur SuccessFactors, ou "Certifications" sur d'autres ATS).
+ *
+ * @param {Object} profil
+ * @returns {Promise<number>}
+ */
+async function fillCertificationSections(profil) {
+  var certifications = profil.certifications || [];
+  if (certifications.length === 0) return 0;
+
+  resetSFComboboxState();
+
+  if (certifications.length > 10) {
+    Logger.warn(
+      "Profil contient " + certifications.length + " certifications, plafonné à 10"
+    );
+    certifications = certifications.slice(0, 10);
+  }
+
+  var sectionEl = await expandSection("certification");
+  if (!sectionEl) sectionEl = findSection("certification");
+  if (!sectionEl) {
+    Logger.log("Section certification non trouvée sur cette page");
+    return 0;
+  }
+
+  var existing = findAllDynamicContainers(sectionEl);
+  Logger.log(
+    "Section certification : " + existing.length +
+    " entrée(s) existante(s), profil = " + certifications.length + " certif(s)."
+  );
+
+  var added = 0;
+
+  for (var i = 0; i < certifications.length; i++) {
+    var cert = certifications[i];
+    if (!cert.nom) continue;
+
+    var container;
+    if (i < existing.length) {
+      container = existing[i];
+      Logger.log("Certification #" + (i + 1) + " : réutilisation entrée existante");
+    } else {
+      var addBtn = findAddButton(sectionEl, "certification");
+      if (!addBtn) {
+        Logger.warn("Bouton Ajouter (certification) non trouvé");
+        break;
+      }
+      var beforeSnapshot = snapshotInputs();
+      var beforeDeletes = snapshotDeleteButtons();
+      Logger.log(
+        "Clic Ajouter certification #" + (i + 1) + " sur <" +
+        addBtn.tagName.toLowerCase() +
+        " class='" + (addBtn.className || "").substring(0, 60) + "'>"
+      );
+      clickElementRobust(addBtn);
+      await waitForNewFields(5000);
+
+      var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
+      if (!newContainer) {
+        Logger.warn("Clic Ajouter certification n'a créé aucun nouvel input — arrêt");
+        break;
+      }
+      container = newContainer;
+    }
+
+    var values = {
+      nom_certification: cert.nom || "",
+      organisme: cert.organisme || "",
+      annee: cert.annee || "",
+      description: cert.description || "",
+    };
+
+    var filled = await fillSubfields(container, CERTIFICATION_SUBFIELDS, values);
+    Logger.log("Certification #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
+    added++;
+  }
+
+  Logger.log(added + " certification(s) traitée(s)");
+  return added;
+}
+
+/**
+ * Remplit les langues du profil (section "Compétences linguistiques" sur SF,
+ * ou "Languages" sur d'autres ATS).
+ *
+ * @param {Object} profil
+ * @returns {Promise<number>}
+ */
+async function fillLangueSections(profil) {
+  var langues = profil.langues || [];
+  if (langues.length === 0) return 0;
+
+  // Normaliser : accepter aussi un array de strings
+  langues = langues.map(function (l) {
+    if (typeof l === "string") return { nom: l, niveau: "" };
+    return l;
+  }).filter(function (l) { return l && l.nom; });
+  if (langues.length === 0) return 0;
+
+  resetSFComboboxState();
+
+  if (langues.length > 15) {
+    Logger.warn("Profil contient " + langues.length + " langues, plafonné à 15");
+    langues = langues.slice(0, 15);
+  }
+
+  var sectionEl = await expandSection("langue");
+  if (!sectionEl) sectionEl = findSection("langue");
+  if (!sectionEl) {
+    Logger.log("Section langue non trouvée sur cette page");
+    return 0;
+  }
+
+  var existing = findAllDynamicContainers(sectionEl);
+  Logger.log(
+    "Section langue : " + existing.length +
+    " entrée(s) existante(s), profil = " + langues.length + " langue(s)."
+  );
+
+  var added = 0;
+
+  for (var i = 0; i < langues.length; i++) {
+    var lang = langues[i];
+    if (!lang.nom) continue;
+
+    var container;
+    if (i < existing.length) {
+      container = existing[i];
+      Logger.log("Langue #" + (i + 1) + " : réutilisation entrée existante");
+    } else {
+      var addBtn = findAddButton(sectionEl, "langue");
+      if (!addBtn) {
+        Logger.warn("Bouton Ajouter (langue) non trouvé");
+        break;
+      }
+      var beforeSnapshot = snapshotInputs();
+      var beforeDeletes = snapshotDeleteButtons();
+      Logger.log(
+        "Clic Ajouter langue #" + (i + 1) + " sur <" +
+        addBtn.tagName.toLowerCase() +
+        " class='" + (addBtn.className || "").substring(0, 60) + "'>"
+      );
+      clickElementRobust(addBtn);
+      await waitForNewFields(5000);
+
+      var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
+      if (!newContainer) {
+        Logger.warn("Clic Ajouter langue n'a créé aucun nouvel input — arrêt");
+        break;
+      }
+      container = newContainer;
+    }
+
+    // Niveau par défaut si non renseigné dans le profil
+    var niveauDefault = lang.niveau || "Bon";
+    var values = {
+      langue: lang.nom,
+      niveau: niveauDefault,
+      niveau_parle: niveauDefault,
+      niveau_ecrit: niveauDefault,
+      niveau_lu: niveauDefault,
+    };
+
+    var filled = await fillSubfields(container, LANGUE_SUBFIELDS, values);
+    Logger.log("Langue #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
+    added++;
+  }
+
+  Logger.log(added + " langue(s) traitée(s)");
   return added;
 }
 
