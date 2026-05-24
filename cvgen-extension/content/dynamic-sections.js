@@ -799,22 +799,14 @@ async function fillSFCombobox(input, value) {
   var inputId = input.getAttribute("id");
   if (!inputId) return false;
 
-  // 1. Ouvrir le menu : SF a souvent un bouton voisin "_selectButton"
-  var openTargetId = inputId.replace(/_input$/, "_selectButton");
-  var openTarget = document.getElementById(openTargetId) || input;
-  if (openTarget.id) {
-    execInMainWorld(
-      "(function(){try{var b=document.getElementById(" + jsStringLit(openTarget.id) + ");" +
-      "if(b){b.focus();b.click();}}catch(e){console.warn('[CVGen MAIN] open combobox failed',e);}}())"
-    );
-  } else {
-    try { input.focus(); input.click(); } catch (_) {}
-  }
+  // 1. Ouvrir le menu via plusieurs stratégies (la 1ère qui marche suffit)
+  await openSFCombobox(input);
 
   // 2. Attendre que la listbox apparaisse
   var listbox = await waitForSFListbox(input, 3500);
   if (!listbox) {
     Logger.warn("fillSFCombobox: listbox introuvable pour " + inputId);
+    debugLogVisibleDropdowns();
     return false;
   }
 
@@ -864,6 +856,103 @@ async function fillSFCombobox(input, value) {
   // Petite pause pour laisser SF traiter
   await new Promise(function (r) { setTimeout(r, 200); });
   return true;
+}
+
+/**
+ * Ouvre un combobox SuccessFactors via plusieurs stratégies cumulatives :
+ *  1. Eval de l'attribut onclick dans le main world (le plus fiable car
+ *     SF a typiquement onclick="juic.fire('152:','_click',event)")
+ *  2. Clic main world sur le _selectButton voisin
+ *  3. Clic main world sur l'input lui-même
+ *  4. Focus + dispatch mousedown/mouseup/click depuis l'isolated world
+ *
+ * @param {Element} input
+ * @returns {Promise<void>}
+ */
+async function openSFCombobox(input) {
+  var inputId = input.getAttribute("id") || "";
+  var onclickAttr = input.getAttribute("onclick") || "";
+  var btnId = inputId ? inputId.replace(/_input$/, "_selectButton") : "";
+  var btnEl = btnId && btnId !== inputId ? document.getElementById(btnId) : null;
+  var btnOnclick = btnEl ? (btnEl.getAttribute("onclick") || "") : "";
+
+  // Stratégie 1 : eval onclick attribute du bouton (priorité) puis de l'input
+  var onclickToEval = btnOnclick || onclickAttr;
+  if (onclickToEval && (onclickToEval.indexOf("juic") !== -1 || onclickToEval.indexOf("sap.") !== -1)) {
+    Logger.log("openSFCombobox: eval onclick='" + onclickToEval.substring(0, 80) + "'");
+    execInMainWorld(
+      "(function(){try{" +
+        "var event=new MouseEvent('click',{bubbles:true,cancelable:true,view:window});" +
+        "(function(event){" + onclickToEval + "})(event);" +
+      "}catch(e){console.warn('[CVGen MAIN] eval combobox onclick failed',e);}}())"
+    );
+    await new Promise(function (r) { setTimeout(r, 100); });
+    return;
+  }
+
+  // Stratégie 2 : click main world sur button
+  if (btnEl && btnId) {
+    execInMainWorld(
+      "(function(){try{var b=document.getElementById(" + jsStringLit(btnId) + ");" +
+      "if(b){b.focus();b.click();}}catch(e){console.warn('[CVGen MAIN] click button failed',e);}}())"
+    );
+    await new Promise(function (r) { setTimeout(r, 100); });
+    return;
+  }
+
+  // Stratégie 3 : click main world sur l'input
+  if (inputId) {
+    execInMainWorld(
+      "(function(){try{var i=document.getElementById(" + jsStringLit(inputId) + ");" +
+      "if(i){i.focus();i.click();}}catch(e){console.warn('[CVGen MAIN] click input failed',e);}}())"
+    );
+    await new Promise(function (r) { setTimeout(r, 100); });
+  }
+
+  // Stratégie 4 (fallback) : events dans l'isolated world
+  try {
+    input.focus();
+    var opts = { bubbles: true, cancelable: true, view: window };
+    input.dispatchEvent(new MouseEvent("mousedown", opts));
+    input.dispatchEvent(new MouseEvent("mouseup", opts));
+    input.dispatchEvent(new MouseEvent("click", opts));
+  } catch (_) {}
+}
+
+/**
+ * Log de debug : liste les éléments visibles qui ressemblent à des
+ * dropdowns/popovers dans le body, pour aider à identifier où SF place
+ * sa listbox.
+ */
+function debugLogVisibleDropdowns() {
+  var candidates = document.querySelectorAll(
+    '[role="listbox"], [role="grid"], [role="dialog"], [role="menu"], ' +
+    '[class*="dropdown"], [class*="Dropdown"], ' +
+    '[class*="picklist"], [class*="Picklist"], ' +
+    '[class*="popover"], [class*="Popover"], ' +
+    '[class*="popup"], [class*="Popup"], ' +
+    '[class*="menu"], [class*="Menu"]'
+  );
+  var visible = [];
+  for (var i = 0; i < candidates.length; i++) {
+    var c = candidates[i];
+    var hidden =
+      c.getAttribute("aria-hidden") === "true" ||
+      c.style.display === "none" ||
+      c.style.visibility === "hidden" ||
+      c.offsetParent === null;
+    if (!hidden) visible.push(c);
+  }
+  Logger.log("debugLogVisibleDropdowns: " + visible.length + " candidat(s) visible(s)");
+  for (var j = 0; j < Math.min(visible.length, 8); j++) {
+    var v = visible[j];
+    Logger.log(
+      "  → " + v.tagName.toLowerCase() +
+      " id='" + (v.id || "") + "'" +
+      " role='" + (v.getAttribute("role") || "") + "'" +
+      " class='" + (v.className || "").substring(0, 80) + "'"
+    );
+  }
 }
 
 /**
