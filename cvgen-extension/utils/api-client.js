@@ -4,8 +4,11 @@
  * Les content scripts n'appellent jamais l'API directement.
  */
 
-// Valeur par défaut — changer ici pour le dev local, ou via la page Options
-var API_BASE_URL = "http://localhost:8080";
+// Valeur par défaut utilisée si aucune URL n'est encore stockée.
+// Modifiable à tout moment via la page Options (chrome.storage.local → apiBaseUrl).
+// Pour pointer vers un backend local pendant le dev :
+//   ouvrir la page Options et saisir http://localhost:8080
+var API_BASE_URL = "https://api.cvgen.fr";
 
 /**
  * Effectue un appel à l'API CVGen avec le token JWT Bearer.

@@ -173,6 +173,7 @@
    */
   async function handleFillForm(options) {
     var overwrite = options.overwrite === true;
+    var showToast = options.showToast !== false; // activé par défaut
     var hostname = window.location.hostname;
     var isSF = hostname.includes("successfactors");
 
@@ -201,15 +202,20 @@
     var filled = 0;
     var skipped = 0;
 
-    // Debug : voir les données brutes et normalisées (Logger.log pour toujours voir)
-    Logger.log("API brut — clés: " + Object.keys(rawProfil).join(", "));
-    Logger.log("API brut — experiences: " + (rawProfil.experiences ? rawProfil.experiences.length : "null") +
-      ", educations: " + (rawProfil.educations ? rawProfil.educations.length : "null"));
-    Logger.log("Normalisé — identite: " + (profil.identite ? profil.identite.prenom + " " + profil.identite.nom + " / " + profil.identite.email : "VIDE"));
-    Logger.log("Normalisé — formations: " + (profil.formations ? profil.formations.length : 0) +
-      (profil.formations && profil.formations[0] ? " → " + JSON.stringify(profil.formations[0]).substring(0, 200) : " (VIDE)"));
-    Logger.log("Normalisé — experiences: " + (profil.experiences ? profil.experiences.length : 0) +
-      (profil.experiences && profil.experiences[0] ? " → " + JSON.stringify(profil.experiences[0]).substring(0, 200) : " (VIDE)"));
+    // Diagnostic : volumes uniquement en log standard, contenu détaillé en debug
+    Logger.log(
+      "Profil chargé — " +
+        (rawProfil.experiences ? rawProfil.experiences.length : 0) + " exp, " +
+        (rawProfil.educations ? rawProfil.educations.length : 0) + " formations"
+    );
+    Logger.debug("API brut — clés: " + Object.keys(rawProfil).join(", "));
+    Logger.debug("Normalisé — identite OK: " + !!(profil.identite && profil.identite.email));
+    if (profil.formations && profil.formations[0]) {
+      Logger.debug("Normalisé — 1ère formation", profil.formations[0]);
+    }
+    if (profil.experiences && profil.experiences[0]) {
+      Logger.debug("Normalisé — 1ère expérience", profil.experiences[0]);
+    }
 
     // 2. Ouvrir les accordéons (SuccessFactors, etc.) et attendre le chargement Ajax
     await expandProfileAccordions();
@@ -693,7 +699,9 @@
     }
 
     var totalFilled = filled + expFilled + formFilled + filesFilled;
-    showCompletionToast(totalFilled, visibleInputs.length);
+    if (showToast) {
+      showCompletionToast(totalFilled, visibleInputs.length);
+    }
     Logger.log(
       "Terminé: " + filled + " standards + " +
         expFilled + " exp + " + formFilled + " form + " +

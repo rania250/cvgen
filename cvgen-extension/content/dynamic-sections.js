@@ -50,19 +50,22 @@ var SECTION_PATTERNS = {
 async function expandSection(type) {
   var patterns = SECTION_PATTERNS[type].map(normalize);
 
-  // Sélecteurs courants pour les headers d'accordéon
+  // Sélecteurs courants pour les headers d'accordéon (SF, Workday, Taleo, etc.)
   var candidates = Array.from(
     document.querySelectorAll(
-      'button, [role="button"], summary, a, h2, h3, h4, ' +
+      'button, [role="button"], summary, a, h2, h3, h4, h5, ' +
         '[class*="accordion"], [class*="section-header"], [class*="panel-title"], ' +
-        '[class*="toggle"], [class*="collapse"]',
+        '[class*="panel-heading"], [class*="acc-header"], [class*="acc-title"], ' +
+        '[class*="toggle"], [class*="collapse"], [class*="expand"]',
     ),
   );
 
   var headerEl = null;
   for (var i = 0; i < candidates.length; i++) {
     var el = candidates[i];
-    var text = normalize(el.innerText || el.textContent || "");
+    // On limite la longueur du texte pour éviter les false-positives (page entière)
+    var raw = (el.innerText || el.textContent || "").substring(0, 200);
+    var text = normalize(raw);
     for (var j = 0; j < patterns.length; j++) {
       if (text.includes(patterns[j])) {
         headerEl = el;
@@ -94,6 +97,8 @@ async function expandSection(type) {
 var ADD_BUTTON_PATTERNS = [
   "ajouter",
   "ajouter une ligne",
+  "ajouter un element",
+  "ajouter un élément",
   "add",
   "+ ajouter",
   "add entry",
@@ -104,6 +109,9 @@ var ADD_BUTTON_PATTERNS = [
   "ajouter une formation",
   "nouvelle entrée",
   "new entry",
+  "create new",
+  "creer",
+  "créer",
 ];
 
 // ─── Sous-champs par section ──────────────────────────────────────────────────
@@ -273,21 +281,33 @@ function findSection(type) {
   var patterns = SECTION_PATTERNS[type].map(normalize);
   var headings = Array.from(
     document.querySelectorAll(
-      'h1, h2, h3, h4, h5, legend, [class*="section"], [class*="header"], [class*="title"], summary',
+      'h1, h2, h3, h4, h5, legend, summary, ' +
+        '[class*="section"], [class*="header"], [class*="heading"], [class*="title"], ' +
+        '[class*="panel-heading"], [class*="acc-header"], [class*="accordion"], ' +
+        '[role="heading"], [role="tab"]',
     ),
   );
 
+  var best = null;
+  var bestLen = Infinity;
+
   for (var i = 0; i < headings.length; i++) {
-    var text = normalize(
-      headings[i].innerText || headings[i].textContent || "",
-    );
+    var raw = (headings[i].innerText || headings[i].textContent || "").substring(0, 200);
+    var text = normalize(raw);
+    if (!text) continue;
     for (var j = 0; j < patterns.length; j++) {
       if (text.includes(patterns[j])) {
-        return headings[i];
+        // Privilégier le candidat dont le texte est le plus court (= header pur,
+        // pas un parent qui englobe toute la section)
+        if (text.length < bestLen) {
+          best = headings[i];
+          bestLen = text.length;
+        }
+        break;
       }
     }
   }
-  return null;
+  return best;
 }
 
 /**
@@ -300,26 +320,38 @@ function findAddButton(sectionEl) {
   var patterns = ADD_BUTTON_PATTERNS.map(normalize);
 
   /**
-   * Teste si un élément est un bouton "Ajouter"
+   * Teste si un élément est un bouton "Ajouter".
+   * Vérifie texte, aria-label, title, value (input), et data-action.
    */
   function isAddBtn(el) {
-    var text = normalize(el.innerText || el.textContent || "");
-    var aria = normalize(el.getAttribute("aria-label") || "");
-    var title = normalize(el.getAttribute("title") || "");
-    for (var j = 0; j < patterns.length; j++) {
-      if (
-        text.includes(patterns[j]) ||
-        aria.includes(patterns[j]) ||
-        title.includes(patterns[j])
-      ) {
-        return true;
+    var sources = [
+      el.innerText || el.textContent || "",
+      el.getAttribute("aria-label") || "",
+      el.getAttribute("title") || "",
+      el.getAttribute("value") || "",          // <input type="button" value="Ajouter">
+      el.getAttribute("data-action") || "",
+      el.getAttribute("data-automation-id") || "",
+      el.getAttribute("name") || "",
+    ];
+    for (var s = 0; s < sources.length; s++) {
+      var norm = normalize(sources[s]);
+      if (!norm) continue;
+      for (var j = 0; j < patterns.length; j++) {
+        if (norm.includes(patterns[j])) return true;
       }
     }
     return false;
   }
 
-  // Sélecteur étendu pour SF (div.addRowButton, div[role=button], etc.)
-  var BTN_SELECTOR = 'button, a, [role="button"], span[onclick], div[onclick], .addRowButton, [class*="addRow"], [id*="addRow"]';
+  // Sélecteur étendu : SF (addRowButton), Taleo (ftl-add-link, add-link),
+  // Workday (data-automation-id) et inputs button/submit/image.
+  var BTN_SELECTOR =
+    'button, a, [role="button"], ' +
+    'input[type="button"], input[type="submit"], input[type="image"], ' +
+    'span[onclick], div[onclick], li[onclick], i[onclick], ' +
+    '.addRowButton, [class*="addRow"], [id*="addRow"], ' +
+    '[class*="add-link"], [class*="addLink"], [class*="ftl-add"], ' +
+    '[data-action*="add"], [data-automation-id*="add"]';
 
   // 1. Chercher dans le parent immédiat (5 niveaux)
   var parent = sectionEl.parentElement;
@@ -376,13 +408,45 @@ function findAddButton(sectionEl) {
 }
 
 /**
- * Après avoir cliqué sur "Ajouter", attend que les nouveaux champs apparaissent.
+ * Après avoir cliqué sur "Ajouter", attend que de nouveaux champs apparaissent.
+ * Combine : (1) MutationObserver pour réagir dès qu'un input est ajouté,
+ *           (2) timeout de sécurité, (3) attente minimale pour laisser l'animation finir.
+ *
  * @param {number} timeoutMs
+ * @param {Element} [scope] - racine d'observation (défaut : document.body)
  * @returns {Promise<void>}
  */
-function waitForNewFields(timeoutMs) {
+function waitForNewFields(timeoutMs, scope) {
+  timeoutMs = timeoutMs || 2500;
+  scope = scope || document.body;
+
   return new Promise(function (resolve) {
-    setTimeout(resolve, timeoutMs || 800);
+    var initialCount = scope.querySelectorAll(
+      'input:not([type="hidden"]), textarea, select'
+    ).length;
+
+    var resolved = false;
+    function finish() {
+      if (resolved) return;
+      resolved = true;
+      try { observer.disconnect(); } catch (_) {}
+      // Petit délai supplémentaire pour les animations CSS et le rendu
+      setTimeout(resolve, 200);
+    }
+
+    var observer = new MutationObserver(function () {
+      var current = scope.querySelectorAll(
+        'input:not([type="hidden"]), textarea, select'
+      ).length;
+      // Aussi déclencher si un modal/dialog vient d'apparaître
+      var dialog = document.querySelector('[role="dialog"]:not([aria-hidden="true"])');
+      if (current > initialCount || (dialog && dialog.querySelector('input, textarea, select'))) {
+        finish();
+      }
+    });
+    observer.observe(scope, { childList: true, subtree: true, attributes: true });
+
+    setTimeout(finish, timeoutMs);
   });
 }
 
@@ -652,19 +716,35 @@ async function fillFormationSections(profil) {
  * @returns {Element|null}
  */
 function findLatestDynamicForm(sectionEl) {
+  // 1. Cas modal : certains ATS (Taleo, Workday, Capgemini) ouvrent un
+  //    <div role="dialog"> ou .modal après le clic Ajouter.
+  var openDialog = document.querySelector(
+    '[role="dialog"]:not([aria-hidden="true"]), ' +
+    '.modal.in, .modal.show, [class*="modal"][style*="display: block"], ' +
+    '[class*="popup"]:not([aria-hidden="true"]), [class*="overlay"][aria-modal="true"]'
+  );
+  if (openDialog && openDialog.querySelector('input, select, textarea')) {
+    return openDialog;
+  }
+
   var container =
     sectionEl.closest('section, fieldset, [class*="section"], details') ||
     sectionEl.parentElement;
   if (!container) return null;
 
-  // Chercher tous les containers de formulaire dans la section
+  // 2. Chercher tous les containers de formulaire dans la section
   var formContainers = Array.from(
     container.querySelectorAll(
-      'fieldset, [class*="form-group"], [class*="entry"], [class*="item"], [class*="row"], div[data-automation-id]',
+      'fieldset, [class*="form-group"], [class*="entry"], [class*="item"], ' +
+      '[class*="row"], [class*="record"], [class*="block"], ' +
+      'div[data-automation-id], li[class*="entry"]',
     ),
-  );
+  ).filter(function (el) {
+    // Garder uniquement les containers qui ont au moins 1 input visible
+    return el.querySelector('input:not([type="hidden"]), textarea, select') !== null;
+  });
 
-  // Retourner le dernier (le plus récemment ajouté)
+  // 3. Retourner le dernier (le plus récemment ajouté)
   if (formContainers.length > 0) {
     return formContainers[formContainers.length - 1];
   }

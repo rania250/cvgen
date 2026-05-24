@@ -346,9 +346,13 @@ document
     resultEl.style.display = "none";
 
     try {
+      const prefs = (await Storage.get("preferences")) || {};
       const response = await sendToContentScript({
         type: "FILL_FORM",
-        options: { overwrite: false },
+        options: {
+          overwrite: prefs.overwrite === true,
+          showToast: prefs.showToast !== false,
+        },
       });
 
       if (response && response.success) {

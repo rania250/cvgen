@@ -81,11 +81,20 @@ var Storage = {
   },
 
   async getCoverLetter() {
-    return this.get("lettreMutation");
+    // Migration : ancienne clé "lettreMutation" (typo) vers "lettreMotivation"
+    const current = await this.get("lettreMotivation");
+    if (current) return current;
+    const legacy = await this.get("lettreMutation");
+    if (legacy) {
+      await this.set("lettreMotivation", legacy);
+      await this.remove("lettreMutation");
+      return legacy;
+    }
+    return undefined;
   },
 
   async setCoverLetter(lettre) {
-    return this.set("lettreMutation", lettre);
+    return this.set("lettreMotivation", lettre);
   },
 
   /**

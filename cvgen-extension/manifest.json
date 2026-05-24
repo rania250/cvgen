@@ -45,7 +45,25 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://fr.indeed.com/*",
+        "https://www.indeed.com/*",
+        "https://www.linkedin.com/*",
+        "https://www.welcometothejungle.com/*",
+        "https://candidat.francetravail.fr/*",
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.workday.com/*",
+        "https://*.successfactors.eu/*",
+        "https://*.successfactors.com/*",
+        "https://*.taleo.net/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.icims.com/*",
+        "https://*.jobvite.com/*"
+      ],
       "js": [
         "utils/logger.js",
         "utils/storage.js",
@@ -58,7 +76,8 @@
         "content/file-uploader.js",
         "content/content-script.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "options_page": "options/options.html",

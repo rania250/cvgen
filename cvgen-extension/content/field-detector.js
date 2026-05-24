@@ -104,7 +104,6 @@ var FIELD_MAPPINGS = {
     "email address",
     "your email",
     "mail",
-    "email address",
     "work email",
     "contact email",
     "emailaddress",

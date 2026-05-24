@@ -3,6 +3,47 @@
  * Fait correspondre un type de champ détecté à la valeur du profil à injecter.
  */
 
+// Mapping minimal pays → indicatif téléphonique international (format +XX)
+// La liste couvre les pays francophones + principaux marchés visés.
+var DIALING_CODES = {
+  france: "+33", belgique: "+32", belgium: "+32",
+  suisse: "+41", switzerland: "+41",
+  luxembourg: "+352",
+  canada: "+1", "canada (quebec)": "+1",
+  "united states": "+1", "etats unis": "+1", "états-unis": "+1", usa: "+1",
+  "royaume uni": "+44", "royaume-uni": "+44", "united kingdom": "+44", uk: "+44",
+  allemagne: "+49", germany: "+49",
+  espagne: "+34", spain: "+34",
+  italie: "+39", italy: "+39",
+  portugal: "+351",
+  "pays bas": "+31", "pays-bas": "+31", netherlands: "+31",
+  irlande: "+353", ireland: "+353",
+  maroc: "+212", morocco: "+212",
+  tunisie: "+216", tunisia: "+216",
+  algerie: "+213", "algérie": "+213", algeria: "+213",
+};
+
+/**
+ * Retourne l'indicatif téléphonique correspondant au pays du profil,
+ * ou tente d'extraire un indicatif déjà présent dans le numéro de téléphone.
+ * Fallback : "+33" (France).
+ */
+function getDialingCode(identite) {
+  if (!identite) return "+33";
+
+  // 1. Champ explicite si présent (futur)
+  if (identite.indicatifTelephone) return String(identite.indicatifTelephone);
+
+  // 2. Extraction depuis le numéro stocké ("+33 6 12 …" ou "00 33 …")
+  var tel = (identite.telephone || "").replace(/\s+/g, "");
+  var m = tel.match(/^\+(\d{1,4})/) || tel.match(/^00(\d{1,4})/);
+  if (m) return "+" + m[1];
+
+  // 3. Déduction depuis le pays
+  var pays = (identite.pays || "France").toString().toLowerCase().trim();
+  return DIALING_CODES[pays] || "+33";
+}
+
 /**
  * Retourne la valeur du profil CVGen pour un type de champ donné.
  *
@@ -106,7 +147,7 @@ function getValueForField(fieldType, profil, coverLetter) {
     permis: profil.permis || identite.permis || "",
     autorisation_travail: profil.autorisationTravail ? "Oui" : "Non",
     source_candidature: "",
-    indicatif_telephone: identite.pays || "France",
+    indicatif_telephone: getDialingCode(identite),
   };
 
   var value = map[fieldType];
