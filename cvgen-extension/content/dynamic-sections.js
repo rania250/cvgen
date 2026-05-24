@@ -526,7 +526,51 @@ function clickElementRobust(el) {
     );
   }
 
-  // ── Stratégie A : événements synthétiques (Pointer + Mouse + Touch + Keyboard) ──
+  // Détection SAP/SuccessFactors : si la cible (ou un parent proche) a un
+  // onclick qui invoque juic/sap/addRow, on DOIT utiliser uniquement la
+  // stratégie main world. Si on mixe avec des events synthétiques en plus,
+  // SF interprète chaque event comme un clic distinct → entrées dupliquées.
+  var onclickAttr =
+    target.getAttribute("onclick") ||
+    el.getAttribute("onclick") ||
+    "";
+  // Remonter sur 3 niveaux si la cible n'a pas onclick mais qu'un parent l'a
+  if (!onclickAttr) {
+    var p = target.parentElement;
+    for (var i = 0; i < 3 && p; i++) {
+      var oc = p.getAttribute("onclick");
+      if (oc) { onclickAttr = oc; break; }
+      p = p.parentElement;
+    }
+  }
+  var btnId = target.id || el.id || "";
+  var needMainWorld =
+    onclickAttr.indexOf("juic") !== -1 ||
+    onclickAttr.indexOf("sap.") !== -1 ||
+    onclickAttr.indexOf("addRow") !== -1;
+
+  if (needMainWorld) {
+    // SAP/SuccessFactors : UNIQUEMENT le clic main world, pas d'events
+    // synthétiques (sinon ajouts multiples).
+    if (btnId) {
+      Logger.log("Stratégie B : exécution dans le main world (juic.fire détecté)");
+      execInMainWorld(
+        "(function(){try{" +
+          "var b=document.getElementById(" + jsStringLit(btnId) + ");" +
+          "if(b){b.focus();b.click();}" +
+        "}catch(e){console.warn('[CVGen MAIN] click failed',e);}}())"
+      );
+    } else {
+      Logger.log("Stratégie B : éval du onclick inline (pas d'id)");
+      execInMainWorld(
+        "(function(){try{(function(event){" + onclickAttr + "})(new MouseEvent('click'));}" +
+        "catch(e){console.warn('[CVGen MAIN] onclick eval failed',e);}}())"
+      );
+    }
+    return;
+  }
+
+  // ── Stratégie A : événements synthétiques (cas générique, non-SAP) ──
   var commonOpts = { bubbles: true, cancelable: true, view: window };
   try {
     target.focus();
@@ -540,70 +584,8 @@ function clickElementRobust(el) {
     target.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
     target.dispatchEvent(new MouseEvent("click",     commonOpts));
     if (typeof target.click === "function") target.click();
-
-    // Clavier : SuccessFactors a souvent onkeypress="juic.fire(...)" en plus
-    // d'onclick. Espace et Entrée sont les touches d'activation des [role=button].
-    var keyEvts = [
-      { type: "keydown",  key: "Enter", code: "Enter", keyCode: 13, which: 13 },
-      { type: "keypress", key: "Enter", code: "Enter", keyCode: 13, which: 13 },
-      { type: "keyup",    key: "Enter", code: "Enter", keyCode: 13, which: 13 },
-      { type: "keydown",  key: " ",     code: "Space", keyCode: 32, which: 32 },
-      { type: "keypress", key: " ",     code: "Space", keyCode: 32, which: 32 },
-      { type: "keyup",    key: " ",     code: "Space", keyCode: 32, which: 32 },
-    ];
-    for (var k = 0; k < keyEvts.length; k++) {
-      try {
-        var ke = new KeyboardEvent(keyEvts[k].type, {
-          bubbles: true, cancelable: true,
-          key: keyEvts[k].key, code: keyEvts[k].code,
-          keyCode: keyEvts[k].keyCode, which: keyEvts[k].which,
-          view: window,
-        });
-        // keyCode/which sont read-only dans certains navigateurs après création
-        // → forcer via Object.defineProperty si nécessaire
-        try {
-          Object.defineProperty(ke, "keyCode", { get: function () { return keyEvts[k].keyCode; } });
-          Object.defineProperty(ke, "which",   { get: function () { return keyEvts[k].which; } });
-        } catch (_) {}
-        target.dispatchEvent(ke);
-      } catch (_) {}
-    }
-
-    try {
-      target.dispatchEvent(new Event("touchstart", { bubbles: true }));
-      target.dispatchEvent(new Event("touchend",   { bubbles: true }));
-    } catch (_) {}
   } catch (err) {
     Logger.warn("Stratégie A (events) a échoué : " + err.message);
-  }
-
-  // ── Stratégie B : main world injection pour SAP/SuccessFactors ──
-  // Si le bouton a un onclick inline qui fait référence à des libs du
-  // main world (juic, sap, etc.), on exécute le clic dans ce contexte.
-  // C'est nécessaire car les events depuis l'isolated world ont
-  // isTrusted=false, ce que juic.fire peut refuser.
-  var onclickAttr = target.getAttribute("onclick") || el.getAttribute("onclick") || "";
-  var btnId = target.id || el.id || "";
-  var needMainWorld =
-    onclickAttr.indexOf("juic") !== -1 ||
-    onclickAttr.indexOf("sap.") !== -1 ||
-    onclickAttr.indexOf("addRow") !== -1;
-
-  if (needMainWorld && btnId) {
-    Logger.log("Stratégie B : exécution dans le main world (juic.fire détecté)");
-    execInMainWorld(
-      "(function(){try{" +
-        "var b=document.getElementById(" + jsStringLit(btnId) + ");" +
-        "if(b){b.focus();b.click();}" +
-      "}catch(e){console.warn('[CVGen MAIN] click failed',e);}}())"
-    );
-  } else if (needMainWorld && !btnId) {
-    // Pas d'id → on essaie d'évaluer le contenu de onclick directement
-    Logger.log("Stratégie B : éval du onclick inline (pas d'id)");
-    execInMainWorld(
-      "(function(){try{(function(event){" + onclickAttr + "})(new MouseEvent('click'));}" +
-      "catch(e){console.warn('[CVGen MAIN] onclick eval failed',e);}}())"
-    );
   }
 }
 
@@ -812,7 +794,6 @@ async function fillExperienceSections(profil) {
       }
 
       var beforeSnapshot = snapshotInputs();
-      var beforeCount = beforeSnapshot.size;
       Logger.log(
         "Clic Ajouter exp #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
@@ -820,7 +801,7 @@ async function fillExperienceSections(profil) {
       clickElementRobust(addBtn);
       await waitForNewFields(3500);
 
-      var newContainer = findContainerOfNewInputs(beforeSnapshot, beforeCount);
+      var newContainer = findContainerOfNewInputs(beforeSnapshot);
       if (!newContainer) {
         Logger.warn("Clic Ajouter exp n'a créé aucun nouvel input — arrêt");
         break;
@@ -867,21 +848,18 @@ function snapshotInputs() {
  * Compare le DOM avant/après un clic Ajouter et retourne le container
  * qui regroupe les inputs de la NOUVELLE entrée uniquement.
  *
- * Stratégie en 2 cas :
- *  - Cas idéal : tous les anciens inputs ont disparu OU le LCA des nouveaux
- *    ne contient aucun ancien → on retourne le LCA.
- *  - Cas re-render (fréquent sur SuccessFactors) : SF re-render toute la
- *    section, donc TOUS les inputs (anciens + nouveaux) sont "nouveaux" au
- *    sens de l'identité DOM. Le LCA est alors le container global de la
- *    section. On regarde dans ce LCA combien d'enfants directs contiennent
- *    des inputs (= entrées) et on retourne le DERNIER.
+ * Stratégie :
+ *  1. Calcule le LCA (Least Common Ancestor) des nouveaux inputs
+ *  2. Compte les boutons "Supprimer/Delete/Remove" dans ce LCA :
+ *     - Si ≤ 1 → c'est une entrée unique → retourne le LCA
+ *     - Si ≥ 2 → le LCA englobe plusieurs entrées (cas re-render fréquent
+ *       sur SuccessFactors qui re-render toute la section à chaque clic).
+ *       Retourne le container parent du DERNIER bouton Supprimer.
  *
  * @param {Set<Element>} beforeSet - snapshot d'avant clic (snapshotInputs())
- * @param {number} [beforeInputCount] - nombre d'inputs avant clic, sert
- *        à détecter le re-render quand >0 (anciens disparus + plus de nouveaux).
  * @returns {Element|null}
  */
-function findContainerOfNewInputs(beforeSet, beforeInputCount) {
+function findContainerOfNewInputs(beforeSet) {
   var nowInputs = Array.from(
     document.querySelectorAll('input:not([type="hidden"]), textarea, select')
   );
@@ -889,7 +867,7 @@ function findContainerOfNewInputs(beforeSet, beforeInputCount) {
 
   if (newInputs.length === 0) return null;
 
-  // Calcul du LCA (Least Common Ancestor) des nouveaux inputs
+  // LCA des nouveaux inputs
   var firstChain = [];
   var node = newInputs[0];
   while (node && node !== document.body) {
@@ -910,68 +888,58 @@ function findContainerOfNewInputs(beforeSet, beforeInputCount) {
   }
   if (!lca) return null;
 
-  // Détection re-render : si AVANT le clic on avait déjà des inputs (>0)
-  // et qu'on retrouve plus d'inputs nouveaux que prévu pour 1 seule entrée
-  // (heuristique : > 1.5x la moyenne attendue), c'est un re-render global.
-  // On cherche alors le DERNIER container fils du LCA qui contient des inputs.
-  var seemsRerender =
-    typeof beforeInputCount === "number" &&
-    beforeInputCount > 0 &&
-    newInputs.length >= beforeInputCount * 1.5;
+  // Détecter combien d'entrées le LCA contient via les boutons "Supprimer"
+  var deleteBtns = findDeleteButtons(lca);
 
-  if (seemsRerender) {
-    Logger.log(
-      "Re-render détecté (avant=" + beforeInputCount + " inputs, nouveaux=" +
-      newInputs.length + ") — on prend la dernière entrée"
-    );
-    var lastEntry = findLastEntryContainer(lca);
-    if (lastEntry) return lastEntry;
+  if (deleteBtns.length <= 1) {
+    return lca;
   }
 
+  Logger.log(
+    "LCA contient " + deleteBtns.length + " boutons Supprimer (= " +
+    deleteBtns.length + " entrées) — on isole la dernière"
+  );
+
+  // Trouve le container parent du DERNIER Supprimer qui contient des inputs
+  // et qui ne contient AUCUN autre bouton Supprimer.
+  var lastDelete = deleteBtns[deleteBtns.length - 1];
+  var container = lastDelete.parentElement;
+  while (container && container !== lca && container !== document.body) {
+    var hasInputs = container.querySelector(
+      'input:not([type="hidden"]), textarea, select'
+    );
+    if (hasInputs) {
+      var otherDeletes = findDeleteButtons(container).filter(function (b) {
+        return b !== lastDelete;
+      });
+      if (otherDeletes.length === 0) {
+        return container;
+      }
+    }
+    container = container.parentElement;
+  }
   return lca;
 }
 
 /**
- * Dans un container parent (typiquement le LCA d'une section), trouve le
- * DERNIER container fils qui ressemble à une entrée (a des inputs et est
- * structurellement similaire à ses frères).
- *
+ * Trouve les boutons/liens "Supprimer/Delete/Remove/Retirer" dans un parent.
  * @param {Element} parent
- * @returns {Element|null}
+ * @returns {Element[]}
  */
-function findLastEntryContainer(parent) {
-  // Stratégie 1 : enfants directs qui contiennent chacun des inputs
-  var directChildrenWithInputs = Array.from(parent.children).filter(function (c) {
-    return c.querySelector('input:not([type="hidden"]), textarea, select') !== null;
-  });
-  if (directChildrenWithInputs.length >= 2) {
-    return directChildrenWithInputs[directChildrenWithInputs.length - 1];
-  }
-
-  // Stratégie 2 : descendants groupés par "entrée" via classes courantes
-  var entryNodes = Array.from(
+function findDeleteButtons(parent) {
+  var candidates = Array.from(
     parent.querySelectorAll(
-      '[class*="entry"], [class*="record"], [class*="row"], [class*="item"], ' +
-      '[class*="rcmFormField"], [class*="ftl-record"], [id*="row_"], [id*="_row"]'
+      'a, button, [role="button"], div[onclick], span[onclick], ' +
+      '[class*="delete"], [class*="remove"], [class*="trash"]'
     )
-  ).filter(function (el) {
-    return el.querySelector('input:not([type="hidden"]), textarea, select') !== null;
+  );
+  return candidates.filter(function (el) {
+    var text = (el.textContent || "").toLowerCase().trim();
+    var aria = (el.getAttribute("aria-label") || "").toLowerCase();
+    var title = (el.getAttribute("title") || "").toLowerCase();
+    var blob = text + " " + aria + " " + title;
+    return /(\bsupprim|\bdelete|\bremove|\bretirer|\beffacer)/i.test(blob);
   });
-  if (entryNodes.length >= 2) {
-    // Filtrer : ne garder que les entrées qui sont à la même profondeur dans le DOM
-    // (sinon on prend un sous-conteneur d'une autre entrée)
-    var lastEntry = entryNodes[entryNodes.length - 1];
-    // Vérifier que cette "dernière entrée" n'est pas ancêtre des précédentes
-    for (var k = 0; k < entryNodes.length - 1; k++) {
-      if (lastEntry.contains(entryNodes[k])) {
-        // On a remonté trop haut : retourner le précédent
-        return entryNodes[k];
-      }
-    }
-    return lastEntry;
-  }
-
-  return null;
 }
 
 /**
@@ -1090,7 +1058,6 @@ async function fillFormationSections(profil) {
       }
 
       var beforeSnapshot = snapshotInputs();
-      var beforeCount = beforeSnapshot.size;
       Logger.log(
         "Clic Ajouter formation #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
@@ -1098,7 +1065,7 @@ async function fillFormationSections(profil) {
       clickElementRobust(addBtn);
       await waitForNewFields(3500);
 
-      var newContainer = findContainerOfNewInputs(beforeSnapshot, beforeCount);
+      var newContainer = findContainerOfNewInputs(beforeSnapshot);
       if (!newContainer) {
         Logger.warn("Clic Ajouter formation n'a créé aucun nouvel input — arrêt");
         break;
