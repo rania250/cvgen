@@ -408,37 +408,67 @@ function findAddButton(sectionEl) {
 }
 
 /**
+ * Trouve l'élément vraiment "cliquable" à partir d'un wrapper.
+ * Beaucoup d'ATS (SuccessFactors notamment) utilisent un wrapper
+ * <div class="addRowButton"> qui contient le vrai bouton interactif
+ * (<a>, <button>, [onclick], [role="button"]). Le handler étant sur
+ * l'enfant, un clic sur le div ne déclenche rien.
+ */
+function resolveClickable(el) {
+  if (!el) return null;
+  var INTERACTIVE = ["A", "BUTTON", "INPUT", "SUMMARY"];
+  if (INTERACTIVE.indexOf(el.tagName) !== -1) return el;
+  if (el.hasAttribute("onclick")) return el;
+  if (el.getAttribute("role") === "button") return el;
+  if (el.getAttribute("tabindex") !== null) return el;
+  // Chercher le premier descendant interactif (5 niveaux max)
+  var child = el.querySelector('a, button, input[type="button"], [onclick], [role="button"], [tabindex]');
+  return child || el;
+}
+
+/**
  * Clic robuste compatible SuccessFactors / Taleo / Workday.
- * Dispatche toute la séquence Pointer + Mouse + native .click() pour
- * que les boutons custom (juic.fire de SF, onclick legacy, etc.) réagissent.
+ * Résout d'abord l'élément vraiment cliquable (cas wrapper div) puis
+ * dispatche la séquence complète Pointer + Mouse + Touch + native click().
  *
  * @param {Element} el
  */
 function clickElementRobust(el) {
+  if (!el) return;
+  var target = resolveClickable(el);
+  if (target !== el) {
+    Logger.debug(
+      "Clic redirigé du wrapper <" + el.tagName.toLowerCase() +
+      "> vers enfant cliquable <" + target.tagName.toLowerCase() + ">"
+    );
+  }
+
   try {
-    el.focus();
+    target.focus();
     var commonOpts = { bubbles: true, cancelable: true, view: window };
-    // Pointer Events (SF moderne, Workday)
     try {
-      el.dispatchEvent(new PointerEvent("pointerover", commonOpts));
-      el.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
-      el.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
+      target.dispatchEvent(new PointerEvent("pointerover", commonOpts));
+      target.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
+      target.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
     } catch (_) { /* PointerEvent peut ne pas être dispo */ }
-    // Mouse Events classiques
-    el.dispatchEvent(new MouseEvent("mouseover", commonOpts));
-    el.dispatchEvent(new MouseEvent("mousedown", commonOpts));
-    el.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
-    el.dispatchEvent(new MouseEvent("click",     commonOpts));
-    // Click natif (déclenche onclick="" inline)
-    if (typeof el.click === "function") el.click();
-    // Touch (pour les sites mobile-first)
+    target.dispatchEvent(new MouseEvent("mouseover", commonOpts));
+    target.dispatchEvent(new MouseEvent("mousedown", commonOpts));
+    target.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
+    target.dispatchEvent(new MouseEvent("click",     commonOpts));
+    if (typeof target.click === "function") target.click();
     try {
-      el.dispatchEvent(new Event("touchstart", { bubbles: true }));
-      el.dispatchEvent(new Event("touchend",   { bubbles: true }));
+      target.dispatchEvent(new Event("touchstart", { bubbles: true }));
+      target.dispatchEvent(new Event("touchend",   { bubbles: true }));
     } catch (_) {}
+
+    // Filet de sécurité : si le target ≠ el initial, cliquer aussi le wrapper
+    // (certains ATS attachent le handler au div parent, d'autres à l'enfant)
+    if (target !== el && typeof el.click === "function") {
+      el.click();
+    }
   } catch (err) {
     Logger.warn("clickElementRobust a échoué : " + err.message);
-    try { el.click(); } catch (_) {}
+    try { target.click(); } catch (_) {}
   }
 }
 
