@@ -202,7 +202,16 @@
     var filled = 0;
     var skipped = 0;
 
-    // Diagnostic : volumes uniquement en log standard, contenu détaillé en debug
+    // ─── Diagnostic : compte utilisé (toujours visible dans la console page) ──
+    // Permet à l'utilisateur de vérifier que c'est bien SON profil qui est injecté.
+    var diagPrenom = (user && user.prenom) || (profil.identite && profil.identite.prenom) || "?";
+    var diagNom    = (user && user.nom)    || (profil.identite && profil.identite.nom)    || "?";
+    var diagEmail  = (user && user.email)  || (profil.identite && profil.identite.email)  || "?";
+    console.log(
+      "%c[CVGen] COMPTE UTILISÉ → " + diagPrenom + " " + diagNom + "  ‹" + diagEmail + "›",
+      "background:#0b5; color:white; font-weight:bold; padding:4px 8px; border-radius:3px;"
+    );
+
     Logger.log(
       "Profil chargé — " +
         (rawProfil.experiences ? rawProfil.experiences.length : 0) + " exp, " +
