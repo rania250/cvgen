@@ -436,7 +436,7 @@ document.getElementById("input-cv").addEventListener("change", async function ()
     const b64 = await fileToBase64(file);
     await Storage.set("cvBase64", b64);
     await Storage.set("cvFileName", file.name);
-    updateDocStatus("doc-cv-status", file.name, file.size);
+    updateDocStatus("doc-cv-status", file.name, file.size, "cv");
   } catch (err) {
     Logger.error("Upload CV", err);
   }
@@ -455,7 +455,7 @@ document.getElementById("input-lm").addEventListener("change", async function ()
     const b64 = await fileToBase64(file);
     await Storage.set("lmBase64", b64);
     await Storage.set("lmFileName", file.name);
-    updateDocStatus("doc-lm-status", file.name, file.size);
+    updateDocStatus("doc-lm-status", file.name, file.size, "lm");
   } catch (err) {
     Logger.error("Upload LM", err);
   }
@@ -467,18 +467,57 @@ document.getElementById("input-lm").addEventListener("change", async function ()
 async function refreshDocStatus() {
   const cvName = await Storage.get("cvFileName");
   const lmName = await Storage.get("lmFileName");
-  if (cvName) updateDocStatus("doc-cv-status", cvName, null);
-  if (lmName) updateDocStatus("doc-lm-status", lmName, null);
+  if (cvName) updateDocStatus("doc-cv-status", cvName, null, "cv");
+  else        resetDocStatus("doc-cv-status");
+  if (lmName) updateDocStatus("doc-lm-status", lmName, null, "lm");
+  else        resetDocStatus("doc-lm-status");
 }
 
-function updateDocStatus(elId, filename, size) {
+function updateDocStatus(elId, filename, size, kind) {
   const el = document.getElementById(elId);
   if (!el) return;
-  // Tronquer le nom de fichier si trop long
   const shortName = filename.length > 20 ? filename.substring(0, 18) + "…" : filename;
   const sizeStr = size ? " (" + Math.round(size / 1024) + " Ko)" : "";
-  el.textContent = shortName + sizeStr;
-  el.style.color = "var(--color-success)";
+
+  el.innerHTML = "";
+  const text = document.createElement("span");
+  text.textContent = "✓ " + shortName + sizeStr;
+  text.style.color = "var(--color-success)";
+  el.appendChild(text);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.textContent = "×";
+  removeBtn.title = "Supprimer";
+  removeBtn.style.cssText =
+    "margin-left:6px;border:none;background:transparent;color:#dc3545;" +
+    "cursor:pointer;font-size:16px;line-height:1;padding:0 4px;";
+  removeBtn.addEventListener("click", async function () {
+    await removeDocument(kind);
+  });
+  el.appendChild(removeBtn);
+}
+
+function resetDocStatus(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = "";
+  el.textContent = "Aucun fichier";
+  el.style.color = "";
+}
+
+async function removeDocument(kind) {
+  if (kind === "cv") {
+    await Storage.set("cvBase64", null);
+    await Storage.set("cvFileName", null);
+    resetDocStatus("doc-cv-status");
+    Logger.log("CV supprimé du stockage local");
+  } else if (kind === "lm") {
+    await Storage.set("lmBase64", null);
+    await Storage.set("lmFileName", null);
+    resetDocStatus("doc-lm-status");
+    Logger.log("Lettre supprimée du stockage local");
+  }
 }
 
 function fileToBase64(file) {

@@ -720,26 +720,62 @@
     if (window.FileUploader) {
       try {
         var cvBase64 = await Storage.get("cvBase64");
+        var cvStoredName = await Storage.get("cvFileName");
         if (cvBase64) {
+          Logger.log("CV stocké trouvé : " + (cvStoredName || "sans nom") + " — recherche input file…");
           var cvInput = FileUploader.findCVInput();
           if (cvInput) {
-            var cvName = (profil.identite ? "CV_" + (profil.identite.prenom || "") + "_" + (profil.identite.nom || "") : "CV") + ".pdf";
-            if (FileUploader.upload(cvInput, cvBase64, cvName)) {
-              showFieldFeedback(cvInput);
-              filesFilled++;
+            Logger.log(
+              "Input CV détecté : <input type='file' name='" +
+              (cvInput.name || "") + "' id='" + (cvInput.id || "") + "'>"
+            );
+            if (FileUploader.isInputAlreadyFilled(cvInput) && !overwrite) {
+              Logger.log("Tuile CV déjà remplie sur le site — skip (active overwrite pour remplacer)");
+            } else {
+              var cvName = cvStoredName ||
+                ((profil.identite ? "CV_" + (profil.identite.prenom || "") + "_" + (profil.identite.nom || "") : "CV") + ".pdf");
+              if (FileUploader.upload(cvInput, cvBase64, cvName)) {
+                showFieldFeedback(cvInput);
+                filesFilled++;
+                Logger.log("✓ CV uploadé avec succès : " + cvName);
+              } else {
+                Logger.warn("Upload CV a échoué");
+              }
             }
+          } else {
+            Logger.log("Aucun input file CV trouvé sur cette page");
           }
+        } else {
+          Logger.debug("Aucun CV stocké (uploadez-en un via le popup)");
         }
+
         var lmBase64 = await Storage.get("lmBase64");
+        var lmStoredName = await Storage.get("lmFileName");
         if (lmBase64) {
+          Logger.log("Lettre stockée trouvée : " + (lmStoredName || "sans nom") + " — recherche input file…");
           var lmInput = FileUploader.findCoverLetterInput();
           if (lmInput) {
-            var lmName = "Lettre_Motivation.pdf";
-            if (FileUploader.upload(lmInput, lmBase64, lmName)) {
-              showFieldFeedback(lmInput);
-              filesFilled++;
+            Logger.log(
+              "Input Lettre détecté : <input type='file' name='" +
+              (lmInput.name || "") + "' id='" + (lmInput.id || "") + "'>"
+            );
+            if (FileUploader.isInputAlreadyFilled(lmInput) && !overwrite) {
+              Logger.log("Tuile Lettre déjà remplie sur le site — skip (active overwrite pour remplacer)");
+            } else {
+              var lmName = lmStoredName || "Lettre_Motivation.pdf";
+              if (FileUploader.upload(lmInput, lmBase64, lmName)) {
+                showFieldFeedback(lmInput);
+                filesFilled++;
+                Logger.log("✓ Lettre uploadée avec succès : " + lmName);
+              } else {
+                Logger.warn("Upload Lettre a échoué");
+              }
             }
+          } else {
+            Logger.log("Aucun input file Lettre trouvé sur cette page");
           }
+        } else {
+          Logger.debug("Aucune lettre stockée (uploadez-en une via le popup)");
         }
       } catch (fileErr) {
         Logger.warn("Upload fichiers : " + fileErr.message);
