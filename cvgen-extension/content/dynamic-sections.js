@@ -316,7 +316,7 @@ function findSection(type) {
  * @param {Element} sectionEl
  * @returns {Element|null}
  */
-function findAddButton(sectionEl) {
+function findAddButton(sectionEl, expectedType) {
   var patterns = ADD_BUTTON_PATTERNS.map(normalize);
 
   /**
@@ -353,7 +353,60 @@ function findAddButton(sectionEl) {
     '[class*="add-link"], [class*="addLink"], [class*="ftl-add"], ' +
     '[data-action*="add"], [data-automation-id*="add"]';
 
-  // 1. Chercher dans le parent immédiat (5 niveaux)
+  // ── Filtre par type attendu (utilisé seulement si expectedType passé) ──
+  // SuccessFactors marque chaque addRowButton avec :
+  //   <span class="hiddenAriaContent" aria-label="Expérience professionnelle">
+  // On peut donc filtrer par le aria-label du span caché.
+  var typePatterns = (expectedType && SECTION_PATTERNS[expectedType])
+    ? SECTION_PATTERNS[expectedType].map(normalize)
+    : null;
+
+  function matchesType(btn) {
+    if (!typePatterns) return true;
+    var sources = [];
+    // SF : hiddenAriaContent enfant
+    var hidden = btn.querySelector('.hiddenAriaContent, [class*="hiddenAria"]');
+    if (hidden) {
+      sources.push(hidden.getAttribute('aria-label') || hidden.innerText || '');
+    }
+    // Aria/title/text du bouton lui-même
+    sources.push(btn.getAttribute('aria-label') || '');
+    sources.push(btn.getAttribute('title') || '');
+    // Texte du parent proche (ex: "Ajouter" + heading section voisin)
+    if (btn.parentElement) {
+      sources.push((btn.parentElement.innerText || '').substring(0, 150));
+    }
+
+    for (var s = 0; s < sources.length; s++) {
+      var norm = normalize(sources[s]);
+      if (!norm) continue;
+      for (var p = 0; p < typePatterns.length; p++) {
+        if (norm.includes(typePatterns[p])) return true;
+      }
+    }
+    return false;
+  }
+
+  function isAddBtnTyped(el) {
+    return isAddBtn(el) && matchesType(el);
+  }
+
+  // 1. Si typePatterns est défini : recherche GLOBALE filtrée par type
+  //    (prioritaire car plus fiable que la proximité DOM)
+  if (typePatterns) {
+    var allBtnsGlobal = Array.from(document.querySelectorAll(BTN_SELECTOR));
+    var typedCandidates = allBtnsGlobal.filter(isAddBtnTyped);
+    if (typedCandidates.length > 0) {
+      Logger.debug(
+        "Bouton Ajouter trouvé par type '" + expectedType +
+        "' (" + typedCandidates.length + " candidat·s)"
+      );
+      return typedCandidates[0];
+    }
+    Logger.debug("Aucun bouton 'Ajouter' typé '" + expectedType + "' — fallback proximité");
+  }
+
+  // 2. Chercher dans le parent immédiat (5 niveaux)
   var parent = sectionEl.parentElement;
   for (var level = 0; level < 5 && parent; level++) {
     var btns = Array.from(parent.querySelectorAll(BTN_SELECTOR));
@@ -366,7 +419,7 @@ function findAddButton(sectionEl) {
     parent = parent.parentElement;
   }
 
-  // 2. Chercher dans les frères suivants (contenu de l'accordéon ouvert)
+  // 3. Chercher dans les frères suivants (contenu de l'accordéon ouvert)
   var sibling = sectionEl.nextElementSibling;
   var maxSib = 15;
   while (sibling && maxSib-- > 0) {
@@ -381,15 +434,12 @@ function findAddButton(sectionEl) {
     sibling = sibling.nextElementSibling;
   }
 
-  // 3. Fallback global : chercher dans toute la page le bouton "Ajouter"
-  //    visible le plus proche du sectionEl (par position DOM)
+  // 4. Fallback global non-typé : proximité verticale avec le header
   var allBtns = Array.from(document.querySelectorAll(BTN_SELECTOR));
   var sectionRect = sectionEl.getBoundingClientRect();
-
   var candidates = allBtns.filter(isAddBtn);
   if (candidates.length === 0) return null;
 
-  // Trier par proximité verticale avec le header de section
   candidates.sort(function (a, b) {
     var ra = a.getBoundingClientRect();
     var rb = b.getBoundingClientRect();
@@ -399,11 +449,9 @@ function findAddButton(sectionEl) {
     );
   });
 
-  // Ne retourner que si c'est en dessous du header
   var best = candidates[0];
   var bestRect = best.getBoundingClientRect();
   if (bestRect.top >= sectionRect.top) return best;
-
   return null;
 }
 
@@ -757,52 +805,31 @@ async function fillExperienceSections(profil) {
       Logger.log("Expérience #" + (i + 1) + " : réutilisation entrée existante");
     } else {
       // Cliquer Ajouter pour créer une nouvelle entrée
-      var addBtn = findAddButton(sectionEl);
+      var addBtn = findAddButton(sectionEl, "experience");
       if (!addBtn) {
         Logger.warn("Bouton Ajouter (expérience) non trouvé");
         break;
       }
 
-      var beforeCount = findAllDynamicContainers(sectionEl).length;
-      var beforeInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
+      var beforeSnapshot = snapshotInputs();
       Logger.log(
         "Clic Ajouter exp #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
-        " class='" + (addBtn.className || "").substring(0, 60) + "'> texte='" +
-        (addBtn.innerText || addBtn.value || addBtn.title || "").substring(0, 40) + "'"
+        " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
-      await waitForNewFields(3500); // SF est lent
+      await waitForNewFields(3500);
 
-      var afterContainers = findAllDynamicContainers(sectionEl);
-      var afterInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
-      Logger.log(
-        "Après clic : " + afterContainers.length + " containers (avant " + beforeCount +
-        "), " + afterInputs + " inputs (avant " + beforeInputs + ")"
-      );
-
-      if (afterContainers.length <= beforeCount) {
-        if (afterInputs > beforeInputs) {
-          // Des inputs sont apparus mais hors de notre scope de containers
-          // → on cherche le dernier container ayant un input nouvellement créé
-          Logger.warn(
-            "Nouveaux inputs créés (" + (afterInputs - beforeInputs) +
-            ") mais hors du scope habituel — tentative de fallback global"
-          );
-          container = findGlobalNewContainer();
-          if (!container) {
-            Logger.warn("Pas de container fallback trouvé — arrêt");
-            break;
-          }
-        } else {
-          Logger.warn(
-            "Clic Ajouter n'a créé aucune nouvelle entrée — arrêt (avant=" +
-            beforeCount + ", après=" + afterContainers.length + ")"
-          );
-          break;
-        }
-      } else {
-        container = afterContainers[afterContainers.length - 1];
+      var newContainer = findContainerOfNewInputs(beforeSnapshot);
+      if (!newContainer) {
+        Logger.warn("Clic Ajouter exp n'a créé aucun nouvel input — arrêt");
+        break;
       }
+      Logger.log(
+        "Nouveau container expérience : <" + newContainer.tagName.toLowerCase() +
+        " class='" + (newContainer.className || "").substring(0, 60) + "'> avec " +
+        newContainer.querySelectorAll('input:not([type="hidden"]), textarea, select').length + " input(s)"
+      );
+      container = newContainer;
     }
 
     var values = {
@@ -825,34 +852,53 @@ async function fillExperienceSections(profil) {
 }
 
 /**
- * Cherche dans toute la page un container "fraîchement créé" qui contient des
- * inputs vides — utile quand un clic Ajouter crée des champs hors du scope
- * habituel de la section (ex: SuccessFactors qui injecte en bas du formulaire).
+ * Snapshot des inputs visibles de la page à un instant T.
+ * @returns {Set<Element>}
+ */
+function snapshotInputs() {
+  var set = new Set();
+  var nodes = document.querySelectorAll('input:not([type="hidden"]), textarea, select');
+  for (var i = 0; i < nodes.length; i++) set.add(nodes[i]);
+  return set;
+}
+
+/**
+ * Compare le DOM avant/après un clic Ajouter et retourne le container
+ * commun qui regroupe les inputs NOUVELLEMENT créés.
  *
+ * @param {Set<Element>} beforeSet - snapshot d'avant clic (snapshotInputs())
  * @returns {Element|null}
  */
-function findGlobalNewContainer() {
-  // Containers candidats à l'échelle de la page entière
-  var candidates = Array.from(
-    document.querySelectorAll(
-      'fieldset, [class*="entry"], [class*="record"], [class*="rcm"][class*="item"], ' +
-      '[class*="ftl-record"], [class*="formItem"], [class*="form-item"], ' +
-      'div[data-automation-id*="formField"]'
-    )
-  ).filter(function (el) {
-    var inputs = el.querySelectorAll('input:not([type="hidden"]), textarea, select');
-    if (inputs.length === 0) return false;
-    // Au moins 1 input vide → container "frais"
-    var empties = 0;
-    for (var i = 0; i < inputs.length; i++) {
-      if (!inputs[i].value || inputs[i].value.trim() === "") empties++;
-    }
-    return empties >= Math.min(2, inputs.length);
-  });
+function findContainerOfNewInputs(beforeSet) {
+  var nowInputs = Array.from(
+    document.querySelectorAll('input:not([type="hidden"]), textarea, select')
+  );
+  var newInputs = nowInputs.filter(function (el) { return !beforeSet.has(el); });
 
-  if (candidates.length === 0) return null;
-  // Retourner le DERNIER (le plus récemment ajouté en bas du DOM)
-  return candidates[candidates.length - 1];
+  if (newInputs.length === 0) return null;
+
+  // Calculer l'ancêtre commun le plus proche (LCA) des nouveaux inputs.
+  // Remonte chaque input jusqu'au <body> et garde l'élément le plus profond
+  // qui est ancêtre de TOUS les nouveaux inputs.
+  var firstChain = [];
+  var node = newInputs[0];
+  while (node && node !== document.body) {
+    firstChain.push(node);
+    node = node.parentElement;
+  }
+
+  for (var i = 0; i < firstChain.length; i++) {
+    var candidate = firstChain[i];
+    var containsAll = true;
+    for (var j = 1; j < newInputs.length; j++) {
+      if (!candidate.contains(newInputs[j])) {
+        containsAll = false;
+        break;
+      }
+    }
+    if (containsAll) return candidate;
+  }
+  return null;
 }
 
 /**
@@ -964,50 +1010,31 @@ async function fillFormationSections(profil) {
       container = existingFormContainers[i];
       Logger.log("Formation #" + (i + 1) + " : réutilisation entrée existante");
     } else {
-      var addBtn = findAddButton(sectionEl);
+      var addBtn = findAddButton(sectionEl, "formation");
       if (!addBtn) {
         Logger.warn("Bouton Ajouter (formation) non trouvé");
         break;
       }
 
-      var beforeCount = findAllDynamicContainers(sectionEl).length;
-      var beforeInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
+      var beforeSnapshot = snapshotInputs();
       Logger.log(
         "Clic Ajouter formation #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
-        " class='" + (addBtn.className || "").substring(0, 60) + "'> texte='" +
-        (addBtn.innerText || addBtn.value || addBtn.title || "").substring(0, 40) + "'"
+        " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
       await waitForNewFields(3500);
 
-      var afterContainers = findAllDynamicContainers(sectionEl);
-      var afterInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
-      Logger.log(
-        "Après clic : " + afterContainers.length + " containers (avant " + beforeCount +
-        "), " + afterInputs + " inputs (avant " + beforeInputs + ")"
-      );
-
-      if (afterContainers.length <= beforeCount) {
-        if (afterInputs > beforeInputs) {
-          Logger.warn(
-            "Nouveaux inputs créés (" + (afterInputs - beforeInputs) +
-            ") mais hors du scope habituel — fallback global"
-          );
-          container = findGlobalNewContainer();
-          if (!container) {
-            Logger.warn("Pas de container fallback trouvé — arrêt");
-            break;
-          }
-        } else {
-          Logger.warn(
-            "Clic Ajouter formation n'a créé aucune nouvelle entrée — arrêt (avant=" +
-            beforeCount + ", après=" + afterContainers.length + ")"
-          );
-          break;
-        }
-      } else {
-        container = afterContainers[afterContainers.length - 1];
+      var newContainer = findContainerOfNewInputs(beforeSnapshot);
+      if (!newContainer) {
+        Logger.warn("Clic Ajouter formation n'a créé aucun nouvel input — arrêt");
+        break;
       }
+      Logger.log(
+        "Nouveau container formation : <" + newContainer.tagName.toLowerCase() +
+        " class='" + (newContainer.className || "").substring(0, 60) + "'> avec " +
+        newContainer.querySelectorAll('input:not([type="hidden"]), textarea, select').length + " input(s)"
+      );
+      container = newContainer;
     }
 
     var values = {
