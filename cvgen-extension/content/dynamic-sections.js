@@ -526,18 +526,14 @@ function clickElementRobust(el) {
     );
   }
 
-  // Détection SAP/SuccessFactors : si la cible (ou un parent proche) a un
-  // onclick qui invoque juic/sap/addRow, on DOIT utiliser uniquement la
-  // stratégie main world. Si on mixe avec des events synthétiques en plus,
-  // SF interprète chaque event comme un clic distinct → entrées dupliquées.
+  // Détecter onclick juic/sap pour stratégie B
   var onclickAttr =
     target.getAttribute("onclick") ||
     el.getAttribute("onclick") ||
     "";
-  // Remonter sur 3 niveaux si la cible n'a pas onclick mais qu'un parent l'a
   if (!onclickAttr) {
     var p = target.parentElement;
-    for (var i = 0; i < 3 && p; i++) {
+    for (var pi = 0; pi < 3 && p; pi++) {
       var oc = p.getAttribute("onclick");
       if (oc) { onclickAttr = oc; break; }
       p = p.parentElement;
@@ -549,9 +545,23 @@ function clickElementRobust(el) {
     onclickAttr.indexOf("sap.") !== -1 ||
     onclickAttr.indexOf("addRow") !== -1;
 
+  // ── Stratégie A : UN SEUL click synthétique ──
+  // On limite à un seul event "click" pour éviter de déclencher juic.fire
+  // plusieurs fois (onkeydown, onkeyup et onclick appellent souvent la même
+  // fonction → multiples Pointer/Mouse/Keyboard = multiples ajouts).
+  try {
+    target.focus();
+    target.dispatchEvent(new MouseEvent("click", {
+      bubbles: true, cancelable: true, view: window,
+    }));
+  } catch (err) {
+    Logger.warn("Stratégie A (click) a échoué : " + err.message);
+  }
+
+  // ── Stratégie B : main world click pour SAP/SuccessFactors ──
+  // Indispensable car juic.fire peut filtrer les events isTrusted=false
+  // depuis l'isolated world des content scripts.
   if (needMainWorld) {
-    // SAP/SuccessFactors : UNIQUEMENT le clic main world, pas d'events
-    // synthétiques (sinon ajouts multiples).
     if (btnId) {
       Logger.log("Stratégie B : exécution dans le main world (juic.fire détecté)");
       execInMainWorld(
@@ -567,25 +577,6 @@ function clickElementRobust(el) {
         "catch(e){console.warn('[CVGen MAIN] onclick eval failed',e);}}())"
       );
     }
-    return;
-  }
-
-  // ── Stratégie A : événements synthétiques (cas générique, non-SAP) ──
-  var commonOpts = { bubbles: true, cancelable: true, view: window };
-  try {
-    target.focus();
-    try {
-      target.dispatchEvent(new PointerEvent("pointerover", commonOpts));
-      target.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
-      target.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
-    } catch (_) {}
-    target.dispatchEvent(new MouseEvent("mouseover", commonOpts));
-    target.dispatchEvent(new MouseEvent("mousedown", commonOpts));
-    target.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
-    target.dispatchEvent(new MouseEvent("click",     commonOpts));
-    if (typeof target.click === "function") target.click();
-  } catch (err) {
-    Logger.warn("Stratégie A (events) a échoué : " + err.message);
   }
 }
 
