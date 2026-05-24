@@ -1,6 +1,7 @@
 package com.cvgen.backend.profile.api;
 
 import com.cvgen.backend.auth.infrastructure.persistence.UserJpaRepository;
+import com.cvgen.backend.auth.infrastructure.persistence.entity.UserEntity;
 import com.cvgen.backend.profile.api.dto.CertificationDto;
 import com.cvgen.backend.profile.api.dto.CreateCertificationRequest;
 import com.cvgen.backend.profile.api.dto.CreateEducationRequest;
@@ -36,6 +37,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -304,6 +309,104 @@ public class ProfileController {
     // =====================================================
     // Helpers
     // =====================================================
+
+    /**
+     * Endpoint pour l'extension Chrome CVGen.
+     * Retourne le profil complet au format attendu par l'extension (champs français).
+     */
+    @GetMapping("/complet")
+    @Operation(summary = "Profil complet au format CVGen Extension (champs en français)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getProfilComplet(Authentication auth) {
+        UUID userId = currentUserId(auth);
+        UserProfileDto dto = profileService.getUserProfile(userId);
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable : " + userId));
+
+        // ── Identité ─────────────────────────────────────────────────────────
+        Map<String, Object> identite = new LinkedHashMap<>();
+        identite.put("prenom",    nvl(user.getFirstName()));
+        identite.put("nom",       nvl(user.getLastName()));
+        identite.put("email",     nvl(user.getEmail()));
+        identite.put("telephone", nvl(dto.phone()));
+        identite.put("pays",      nvl(dto.location(), "France"));
+        identite.put("linkedin",  nvl(dto.linkedinUrl()));
+        identite.put("github",    nvl(dto.githubUrl()));
+        identite.put("portfolio", nvl(dto.portfolioUrl()));
+
+        // ── Expériences ──────────────────────────────────────────────────────
+        List<Map<String, Object>> experiences = dto.experiences() == null ? List.of() :
+            dto.experiences().stream().map(e -> {
+                Map<String, Object> exp = new LinkedHashMap<>();
+                exp.put("poste",       nvl(e.jobTitle()));
+                exp.put("entreprise",  nvl(e.company()));
+                exp.put("ville",       nvl(e.location()));
+                exp.put("dateDebut",   fmtDate(e.startDate()));
+                exp.put("dateFin",     e.current() ? null : fmtDate(e.endDate()));
+                exp.put("posteActuel", e.current());
+                exp.put("description", nvl(e.description()));
+                return exp;
+            }).toList();
+
+        // ── Formations ───────────────────────────────────────────────────────
+        List<Map<String, Object>> formations = dto.educations() == null ? List.of() :
+            dto.educations().stream().map(ed -> {
+                Map<String, Object> form = new LinkedHashMap<>();
+                form.put("diplome",       nvl(ed.degree()));
+                form.put("etablissement", nvl(ed.school()));
+                form.put("niveauEtudes",  deriveNiveau(ed.degree()));
+                form.put("domaine",       nvl(ed.fieldOfStudy()));
+                form.put("dateObtention", fmtDate(ed.endDate()));
+                form.put("dateDebut",     fmtDate(ed.startDate()));
+                return form;
+            }).toList();
+
+        // ── Compétences ──────────────────────────────────────────────────────
+        List<String> competences = dto.skills() == null ? List.of() :
+            dto.skills().stream().map(SkillDto::name).filter(n -> n != null && !n.isBlank()).toList();
+
+        // ── Langues ──────────────────────────────────────────────────────────
+        List<String> langues = dto.languages() == null ? List.of() :
+            dto.languages().stream().map(LanguageDto::name).filter(n -> n != null && !n.isBlank()).toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("identite",            identite);
+        result.put("titrePoste",          nvl(dto.title()));
+        result.put("resumeProfessionnel", nvl(dto.summary()));
+        result.put("experiences",         experiences);
+        result.put("formations",          formations);
+        result.put("competences",         competences);
+        result.put("langues",             langues);
+
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    private static String nvl(String val) {
+        return val != null ? val : "";
+    }
+
+    private static String nvl(String val, String defaultVal) {
+        return (val != null && !val.isBlank()) ? val : defaultVal;
+    }
+
+    private static String fmtDate(LocalDate date) {
+        if (date == null) return null;
+        return date.getYear() + "-" + String.format("%02d", date.getMonthValue());
+    }
+
+    private static String deriveNiveau(String degree) {
+        if (degree == null || degree.isBlank()) return "";
+        String d = degree.toLowerCase();
+        if (d.contains("doctorat") || d.contains("phd")) return "Bac+8 / Doctorat";
+        if (d.contains("master 2") || d.contains("m2") || d.contains("bac+5")
+                || d.contains("ingénieur") || d.contains("ingenieur")
+                || d.contains("cto") || d.contains("grande école")) return "Bac+5";
+        if (d.contains("master 1") || d.contains("m1") || d.contains("bac+4")
+                || d.contains("maîtrise") || d.contains("maitrise")) return "Bac+4";
+        if (d.contains("licence") || d.contains("bachelor") || d.contains("bac+3")) return "Bac+3";
+        if (d.contains("bts") || d.contains("dut") || d.contains("but") || d.contains("bac+2")) return "Bac+2";
+        if (d.contains("bac")) return "Bac";
+        return degree;
+    }
 
     /**
      * Résout l'UUID de l'utilisateur courant à partir de l'email contenu dans

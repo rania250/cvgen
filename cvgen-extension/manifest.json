@@ -3,12 +3,7 @@
   "name": "CVGen — Autofill Candidatures",
   "version": "1.0.0",
   "description": "Remplissez vos formulaires de candidature automatiquement avec votre profil CVGen.",
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting",
-    "tabs"
-  ],
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*",
@@ -25,6 +20,8 @@
     "https://*.taleo.net/*",
     "https://*.smartrecruiters.com/*",
     "https://*.myworkdayjobs.com/*",
+    "https://*.icims.com/*",
+    "https://*.jobvite.com/*",
     "https://api.cvgen.fr/*"
   ],
   "background": {
@@ -56,6 +53,9 @@
         "content/field-mapper.js",
         "content/field-filler.js",
         "content/dynamic-sections.js",
+        "content/date-handler.js",
+        "content/offer-extractor.js",
+        "content/file-uploader.js",
         "content/content-script.js"
       ],
       "run_at": "document_idle"

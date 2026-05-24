@@ -1,0 +1,327 @@
+========================================================
+PROMPT AGENT IA — CVGen Chrome Extension : Smart Fill
+========================================================
+
+Tu es un agent développeur expert en extensions Chrome Manifest V3
+et JavaScript vanilla. Tu as accès à tous les fichiers du projet.
+Lis chaque fichier avant de le modifier. Donne le code COMPLET de
+chaque fichier créé ou modifié, prêt à charger dans Chrome via
+chrome://extensions en mode développeur.
+
+────────────────────────────────────────────────────────
+ARCHITECTURE EXISTANTE
+────────────────────────────────────────────────────────
+
+cvgen-extension/
+├── manifest.json
+├── service-worker.js          ← background, auth JWT + cache profil
+├── utils/
+│   ├── logger.js
+│   ├── storage.js
+│   └── api-client.js
+├── popup/
+│   ├── popup.html
+│   └── popup.js
+└── content/
+    ├── content-script.js      ← point d'entrée, handlers FILL_FORM / DETECT_FIELDS
+    ├── field-detector.js      ← détecte le type de chaque champ HTML
+    ├── field-mapper.js        ← mappe profil CVGen → champs détectés
+    ├── field-filler.js        ← remplit input / textarea / select + événements natifs
+    └── dynamic-sections.js   ← gère les boutons "Ajouter" des sections répétables
+
+Backend CVGen (http://localhost:8080) :
+  POST /api/auth/login              → { accessToken, refreshToken }
+  GET  /api/profile                 → profil complet de l'utilisateur
+  POST /api/generation/cv           body: { offerText } → PDF en base64
+  POST /api/generation/cover-letter body: { offerText } → PDF en base64
+
+JWT stocké dans chrome.storage.local sous la clé : cvgen_token
+
+────────────────────────────────────────────────────────
+PROBLÈME ACTUEL
+────────────────────────────────────────────────────────
+
+Le remplissage existant ne gère pas :
+- Les <input type="date"> et datepickers custom (React, jQuery UI…)
+- Les formats de date : JJ/MM/AAAA, MM/AAAA, YYYY-MM-DD
+- Les <select> avec options chargées dynamiquement en Ajax
+- Les champs téléphone avec indicatif pays séparé
+- Les sections répétables (plusieurs expériences, formations)
+- L'upload automatique du CV et de la lettre de motivation générés
+- L'extraction du texte de l'offre d'emploi depuis la page
+
+────────────────────────────────────────────────────────
+CE QUE TU DOIS IMPLÉMENTER
+────────────────────────────────────────────────────────
+
+OBJECTIF UTILISATEUR :
+  L'utilisateur clique sur "Remplissage IA ✨" dans le popup.
+  L'extension :
+    1. Extrait le texte de l'offre d'emploi depuis la page courante
+    2. Appelle le backend CVGen pour générer un CV + une LM personnalisés
+    3. Remplit TOUS les champs du formulaire (y compris dates, selects, téléphone)
+    4. Uploade le CV généré dans le bon champ <input type="file">
+    5. Uploade la LM générée dans le bon champ <input type="file">
+    6. Affiche un résumé dans le popup : X champs remplis, CV uploadé ✓, LM ✓
+
+────────────────────────────────────────────────────────
+FICHIERS À CRÉER
+────────────────────────────────────────────────────────
+
+1. content/offer-extractor.js
+─────────────────────────────
+But : extraire le texte de l'offre depuis la page courante.
+- Cherche dans : <h1>, <h2>, balises avec class/id contenant
+  "job", "offer", "poste", "description", "jobDescription"
+- Cherche le nom de l'entreprise : balises avec "company", "employer", "entreprise"
+- Cherche le titre du poste : <title>, premier <h1>
+- Retourne : { title, company, offerText }
+- offerText = concaténation de tout le texte pertinent trouvé (max 3000 caractères)
+- Exposer via : window.OfferExtractor = { extract }
+
+2. content/date-handler.js
+──────────────────────────
+But : remplir tous les types de champs date.
+- <input type="date"> → valeur au format YYYY-MM-DD
+- <input type="text"> avec placeholder "JJ/MM/AAAA" → format DD/MM/YYYY
+- <input type="text"> avec placeholder "MM/AAAA" ou "MM/YYYY" → format MM/YYYY
+- <input type="text"> avec placeholder "YYYY" → juste l'année
+- Datepicker custom (class contient "datepicker", "date-picker", "react-datepicker",
+  "flatpickr", "pikaday") :
+    → focus() sur l'input
+    → simuler la saisie caractère par caractère avec new KeyboardEvent('keydown')
+    → déclencher 'input' + 'change' + 'blur'
+- Deux selects séparés mois/année :
+    → détecter par proximité dans le DOM (même parent ou label commun)
+    → remplir chaque select séparément
+- Exposer via : window.DateHandler = { fill(element, isoDateString) }
+  isoDateString est toujours au format ISO : "2020-06" ou "2020-06-15" ou "2020"
+
+3. content/file-uploader.js
+────────────────────────────
+But : uploader programmatiquement un PDF dans un <input type="file">.
+- Fonction principale : FileUploader.upload(inputElement, base64String, filename)
+  1. Décoder le base64 → ArrayBuffer → Blob → File
+  2. Créer un DataTransfer, y ajouter le File
+  3. Assigner inputElement.files = dataTransfer.files
+  4. Déclencher les événements : 'input', 'change' (avec bubbles:true)
+- Fonction de détection : FileUploader.findCVInput() et FileUploader.findCoverLetterInput()
+  → Parcourir tous les <input type="file"> de la page
+  → CV : label ou accept contient "cv", "resume", "curriculum"
+  → LM : label ou accept contient "lettre", "cover", "motivation", "letter"
+  → Si plusieurs inputs sans label clair : retourner le premier pour CV, le second pour LM
+- Exposer via : window.FileUploader = { upload, findCVInput, findCoverLetterInput }
+
+────────────────────────────────────────────────────────
+FICHIERS À MODIFIER
+────────────────────────────────────────────────────────
+
+4. content/field-filler.js (modifier)
+──────────────────────────────────────
+Ajouter la gestion des dates :
+- Quand le type détecté est une date (date_debut, date_fin, annee_naissance,
+  date_disponibilite ou tout type contenant "date") :
+  → Appeler DateHandler.fill(element, value) au lieu de fillInputField
+- Ajouter fillPhoneWithCountryCode(element, phone) :
+  → Si le champ téléphone a un préfixe pays séparé (select ou input type=tel court),
+    remplir le préfixe +33 et le numéro sans le 0 initial séparément
+
+5. service-worker.js (modifier)
+────────────────────────────────
+Ajouter le handler SMART_FILL dans le switch de handleMessage :
+
+  case 'SMART_FILL':
+    // 1. Récupérer le profil : GET /api/profile avec le JWT
+    // 2. Générer le CV : POST /api/generation/cv avec { offerText: message.offerText }
+    // 3. Générer la LM : POST /api/generation/cover-letter avec { offerText: message.offerText }
+    // 4. Retourner :
+    //    {
+    //      success: true,
+    //      profil: {...},
+    //      cvBase64: "...",          // null si la génération échoue
+    //      coverLetterBase64: "..."  // null si la génération échoue
+    //    }
+    // Les étapes 2 et 3 sont lancées en parallèle (Promise.all)
+    // En cas d'erreur partielle : continuer quand même, mettre null dans le champ raté
+
+6. content/content-script.js (modifier)
+─────────────────────────────────────────
+Ajouter le handler SMART_FILL dans le switch de chrome.runtime.onMessage :
+
+  case 'SMART_FILL':
+    handleSmartFill()
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+
+Implémenter handleSmartFill() :
+  async function handleSmartFill() {
+    // 1. Extraire l'offre
+    const offer = OfferExtractor.extract();
+
+    // 2. Appeler le service worker
+    const swResult = await sendToSW({ type: 'SMART_FILL', offerText: offer.offerText });
+    if (!swResult.success) throw new Error(swResult.error);
+
+    // 3. Remplir les champs texte/select/date avec les données du profil
+    const fillResult = await handleFillForm({ overwrite: true, profil: swResult.profil });
+
+    // 4. Uploader le CV
+    let cvUploaded = false;
+    if (swResult.cvBase64) {
+      const cvInput = FileUploader.findCVInput();
+      if (cvInput) {
+        FileUploader.upload(cvInput, swResult.cvBase64, 'CV_CVGen.pdf');
+        cvUploaded = true;
+      }
+    }
+
+    // 5. Uploader la LM
+    let lmUploaded = false;
+    if (swResult.coverLetterBase64) {
+      const lmInput = FileUploader.findCoverLetterInput();
+      if (lmInput) {
+        FileUploader.upload(lmInput, swResult.coverLetterBase64, 'LettreMotivation_CVGen.pdf');
+        lmUploaded = true;
+      }
+    }
+
+    return {
+      success: true,
+      filled: fillResult.filled,
+      total: fillResult.total,
+      cvUploaded,
+      lmUploaded,
+      offerTitle: offer.title,
+      offerCompany: offer.company
+    };
+  }
+
+7. popup/popup.html (modifier)
+───────────────────────────────
+Dans le screen "connected", ajouter APRÈS le bouton de remplissage existant :
+
+  <button id="btn-smart-fill" class="btn-primary btn-smart">
+    ✨ Remplissage IA
+  </button>
+
+  <div id="smart-progress" style="display:none">
+    <div class="progress-bar">
+      <div id="progress-fill" style="width:0%"></div>
+    </div>
+    <p id="progress-label">Initialisation…</p>
+  </div>
+
+  <div id="smart-result" style="display:none">
+    <p id="result-text"></p>
+  </div>
+
+Style CSS à ajouter :
+  .btn-smart { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+  .progress-bar { height:6px; background:#e5e7eb; border-radius:3px; margin:8px 0; }
+  #progress-fill { height:100%; background:#3b82f6; border-radius:3px; transition:width 0.3s; }
+
+8. popup/popup.js (modifier)
+──────────────────────────────
+Ajouter le handler du bouton btn-smart-fill :
+
+document.getElementById('btn-smart-fill').addEventListener('click', async function() {
+  // Cacher le résultat précédent
+  document.getElementById('smart-result').style.display = 'none';
+  document.getElementById('smart-progress').style.display = 'block';
+
+  const steps = [
+    { label: 'Analyse de l\'offre…',     pct: 10 },
+    { label: 'Génération du CV…',         pct: 35 },
+    { label: 'Génération de la LM…',      pct: 60 },
+    { label: 'Remplissage du formulaire…',pct: 80 },
+    { label: 'Upload des documents…',     pct: 95 },
+  ];
+
+  // Simuler la progression visuelle pendant que le process tourne
+  let stepIdx = 0;
+  const interval = setInterval(() => {
+    if (stepIdx < steps.length) {
+      document.getElementById('progress-label').textContent = steps[stepIdx].label;
+      document.getElementById('progress-fill').style.width = steps[stepIdx].pct + '%';
+      stepIdx++;
+    }
+  }, 1200);
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const result = await chrome.tabs.sendMessage(tab.id, { type: 'SMART_FILL' });
+
+    clearInterval(interval);
+    document.getElementById('progress-fill').style.width = '100%';
+    document.getElementById('progress-label').textContent = 'Terminé !';
+
+    setTimeout(() => {
+      document.getElementById('smart-progress').style.display = 'none';
+      document.getElementById('smart-result').style.display = 'block';
+
+      let msg = result.filled + ' champs remplis';
+      if (result.cvUploaded) msg += ' · CV uploadé ✓';
+      if (result.lmUploaded) msg += ' · LM uploadée ✓';
+      if (result.offerTitle) msg += '\n' + result.offerTitle;
+      if (!result.cvUploaded) msg += '\n⚠ Aucun champ CV trouvé sur cette page';
+      if (!result.lmUploaded) msg += '\n⚠ Aucun champ LM trouvé sur cette page';
+
+      document.getElementById('result-text').textContent = msg;
+    }, 600);
+
+  } catch (err) {
+    clearInterval(interval);
+    document.getElementById('smart-progress').style.display = 'none';
+    document.getElementById('smart-result').style.display = 'block';
+    document.getElementById('result-text').textContent = '❌ Erreur : ' + err.message;
+  }
+});
+
+9. manifest.json (modifier)
+─────────────────────────────
+Ajouter les nouveaux fichiers content dans content_scripts.js (dans l'ordre) :
+  "utils/logger.js",
+  "utils/storage.js",
+  "content/offer-extractor.js",   ← NOUVEAU
+  "content/date-handler.js",      ← NOUVEAU
+  "content/file-uploader.js",     ← NOUVEAU
+  "content/field-detector.js",
+  "content/field-mapper.js",
+  "content/field-filler.js",
+  "content/dynamic-sections.js",
+  "content/content-script.js"
+
+────────────────────────────────────────────────────────
+CONTRAINTES TECHNIQUES
+────────────────────────────────────────────────────────
+
+- JavaScript vanilla uniquement (pas de bundler, pas de npm, pas d'import/export ES6)
+- Exposer chaque module via window.NomModule = { ... }
+- Aucun accès au DOM depuis service-worker.js (utiliser chrome.tabs.sendMessage)
+- Compatible Manifest V3 (pas de background.page, pas de XMLHttpRequest dans SW)
+- Pour le shadow DOM (Workday) : traverser récursivement element.shadowRoot
+  dans offer-extractor.js et file-uploader.js
+- Les événements synthétiques doivent utiliser { bubbles: true, cancelable: true }
+  pour être captés par React, Angular et Vue
+
+────────────────────────────────────────────────────────
+FORMAT DE RÉPONSE ATTENDU
+────────────────────────────────────────────────────────
+
+Pour chaque fichier, donne :
+  === NOM_DU_FICHIER ===
+  [code complet]
+
+Dans cet ordre :
+  1. content/offer-extractor.js
+  2. content/date-handler.js
+  3. content/file-uploader.js
+  4. content/field-filler.js  (version complète modifiée)
+  5. service-worker.js        (version complète modifiée)
+  6. content/content-script.js (version complète modifiée)
+  7. popup/popup.html         (version complète modifiée)
+  8. popup/popup.js           (version complète modifiée)
+  9. manifest.json            (version complète modifiée)
+
+========================================================

@@ -10,18 +10,32 @@
 
 var SECTION_PATTERNS = {
   experience: [
-    'expérience professionnelle', 'experience professionnelle',
-    'expériences professionnelles', 'expériences',
-    'parcours professionnel', 'historique professionnel',
-    'work experience', 'employment history', 'professional experience',
-    'work history', 'career history'
+    "expérience professionnelle",
+    "experience professionnelle",
+    "expériences professionnelles",
+    "expériences",
+    "parcours professionnel",
+    "historique professionnel",
+    "work experience",
+    "employment history",
+    "professional experience",
+    "work history",
+    "career history",
   ],
   formation: [
-    'formation', 'formations', 'parcours académique', 'parcours academique',
-    'formations et certifications', 'niveau d études', 'diplôme',
-    'education', 'educational background', 'academic background',
-    'qualifications', 'academic history'
-  ]
+    "formation",
+    "formations",
+    "parcours académique",
+    "parcours academique",
+    "formations et certifications",
+    "niveau d études",
+    "diplôme",
+    "education",
+    "educational background",
+    "academic background",
+    "qualifications",
+    "academic history",
+  ],
 };
 
 // ─── Gestion des accordéons (SuccessFactors, etc.) ────────────────────────────
@@ -37,16 +51,18 @@ async function expandSection(type) {
   var patterns = SECTION_PATTERNS[type].map(normalize);
 
   // Sélecteurs courants pour les headers d'accordéon
-  var candidates = Array.from(document.querySelectorAll(
-    'button, [role="button"], summary, a, h2, h3, h4, ' +
-    '[class*="accordion"], [class*="section-header"], [class*="panel-title"], ' +
-    '[class*="toggle"], [class*="collapse"]'
-  ));
+  var candidates = Array.from(
+    document.querySelectorAll(
+      'button, [role="button"], summary, a, h2, h3, h4, ' +
+        '[class*="accordion"], [class*="section-header"], [class*="panel-title"], ' +
+        '[class*="toggle"], [class*="collapse"]',
+    ),
+  );
 
   var headerEl = null;
   for (var i = 0; i < candidates.length; i++) {
     var el = candidates[i];
-    var text = normalize(el.innerText || el.textContent || '');
+    var text = normalize(el.innerText || el.textContent || "");
     for (var j = 0; j < patterns.length; j++) {
       if (text.includes(patterns[j])) {
         headerEl = el;
@@ -60,13 +76,13 @@ async function expandSection(type) {
 
   // Vérifier si la section est repliée
   var isCollapsed =
-    headerEl.getAttribute('aria-expanded') === 'false' ||
-    headerEl.getAttribute('aria-selected') === 'false' ||
-    headerEl.classList.contains('collapsed') ||
+    headerEl.getAttribute("aria-expanded") === "false" ||
+    headerEl.getAttribute("aria-selected") === "false" ||
+    headerEl.classList.contains("collapsed") ||
     headerEl.closest('[aria-expanded="false"]') !== null;
 
   if (isCollapsed) {
-    Logger.log('Ouverture accordéon : ' + (headerEl.innerText || '').trim());
+    Logger.log("Ouverture accordéon : " + (headerEl.innerText || "").trim());
     headerEl.click();
     await waitForNewFields(700);
   }
@@ -76,58 +92,174 @@ async function expandSection(type) {
 
 // Mots-clés des boutons "Ajouter"
 var ADD_BUTTON_PATTERNS = [
-  'ajouter', 'add', '+ ajouter', 'add entry', 'add experience',
-  'add education', 'ajouter une expérience', 'ajouter une formation',
-  'nouvelle entrée', 'new entry'
+  "ajouter",
+  "ajouter une ligne",
+  "add",
+  "+ ajouter",
+  "add entry",
+  "add row",
+  "add experience",
+  "add education",
+  "ajouter une expérience",
+  "ajouter une formation",
+  "nouvelle entrée",
+  "new entry",
 ];
 
 // ─── Sous-champs par section ──────────────────────────────────────────────────
 
 var EXPERIENCE_SUBFIELDS = {
   poste: [
-    'poste', 'titre du poste', 'intitulé du poste', 'fonction',
-    'job title', 'position', 'title', 'role', 'designation'
+    "poste",
+    "rôle",
+    "role",
+    "titre du poste",
+    "intitulé du poste",
+    "fonction",
+    "job title",
+    "position",
+    "title",
+    "designation",
   ],
   entreprise: [
-    'entreprise', 'société', 'employeur', 'nom de l entreprise',
-    'company', 'employer', 'organization', 'organisation', 'company name'
+    "entreprise",
+    "société",
+    "societe",
+    "nom de la société",
+    "nom de la societe",
+    "nom de l entreprise",
+    "employeur",
+    "company",
+    "employer",
+    "organization",
+    "organisation",
+    "company name",
   ],
   date_debut: [
-    'date de début', 'date debut', 'début', 'début d emploi',
-    'start date', 'from', 'date from', 'employment start'
+    "date de début",
+    "date debut",
+    "début",
+    "début d emploi",
+    "start date",
+    "from",
+    "date from",
+    "employment start",
   ],
   date_fin: [
-    'date de fin', 'date fin', 'fin', 'fin d emploi',
-    'end date', 'to', 'date to', 'employment end', 'jusqu à'
+    "date de fin",
+    "date fin",
+    "fin",
+    "fin d emploi",
+    "end date",
+    "to",
+    "date to",
+    "employment end",
+    "jusqu à",
   ],
   lieu: [
-    'lieu', 'ville', 'localisation', 'lieu de travail',
-    'location', 'city', 'work location'
+    "lieu",
+    "ville",
+    "localisation",
+    "lieu de travail",
+    "location",
+    "city",
+    "work location",
   ],
   description: [
-    'description', 'missions', 'responsabilités', 'tâches',
-    'description du poste', 'détails',
-    'description', 'responsibilities', 'duties', 'achievements', 'summary'
-  ]
+    "description",
+    "missions",
+    "responsabilités",
+    "tâches",
+    "description du poste",
+    "détails",
+    "description",
+    "responsibilities",
+    "duties",
+    "achievements",
+    "summary",
+  ],
+  employeur_actuel: [
+    "employeur actuel",
+    "poste actuel",
+    "current employer",
+    "currently employed",
+    "current position",
+    "est ce votre emploi actuel",
+  ],
 };
 
 var FORMATION_SUBFIELDS = {
+  nom_formation: [
+    "nom de la formation",
+    "nom formation",
+    "intitule de la formation",
+    "titre de la formation",
+    "formation name",
+    "program name",
+  ],
   diplome: [
-    'diplôme', 'diplome', 'titre', 'niveau d études', 'qualification',
-    'degree', 'qualification', 'certificate', 'award', 'degree type'
+    "diplôme",
+    "diplome",
+    "titre",
+    "niveau d études",
+    "niveau d etude",
+    "niveau d'etude",
+    "qualification",
+    "degree",
+    "certificate",
+    "award",
+    "degree type",
+  ],
+  diplome_plus_eleve: [
+    "s agit il de votre diplome le plus eleve",
+    "diplome le plus eleve",
+    "highest degree",
+    "highest qualification",
   ],
   etablissement: [
-    'établissement', 'ecole', 'école', 'université', 'universite',
-    'institution', 'school', 'university', 'college', 'institute'
+    "établissement",
+    "ecole",
+    "école",
+    "université",
+    "universite",
+    "ecole universite institut de formation",
+    "institution",
+    "school",
+    "university",
+    "college",
+    "institute",
   ],
   annee_obtention: [
-    'année d obtention', 'annee', 'date d obtention', 'année de fin',
-    'graduation year', 'year of graduation', 'end date', 'completion year'
+    "année d obtention",
+    "annee",
+    "date d obtention",
+    "date d obtention du diplome",
+    "année de fin",
+    "graduation year",
+    "year of graduation",
+    "end date",
+    "completion year",
+    "completion date",
   ],
   domaine: [
-    'domaine', 'spécialité', 'filière', 'mention', 'matière principale',
-    'field of study', 'major', 'subject', 'discipline', 'specialization'
-  ]
+    "domaine",
+    "domaine d etude",
+    "domaine d'etude",
+    "spécialité",
+    "filière",
+    "mention",
+    "matière principale",
+    "field of study",
+    "major",
+    "subject",
+    "discipline",
+    "specialization",
+  ],
+  country_education: [
+    "country of education",
+    "pays de formation",
+    "pays d education",
+  ],
 };
 
 // ─── Fonctions utilitaires ────────────────────────────────────────────────────
@@ -139,12 +271,16 @@ var FORMATION_SUBFIELDS = {
  */
 function findSection(type) {
   var patterns = SECTION_PATTERNS[type].map(normalize);
-  var headings = Array.from(document.querySelectorAll(
-    'h1, h2, h3, h4, h5, legend, [class*="section"], [class*="header"], [class*="title"], summary'
-  ));
+  var headings = Array.from(
+    document.querySelectorAll(
+      'h1, h2, h3, h4, h5, legend, [class*="section"], [class*="header"], [class*="title"], summary',
+    ),
+  );
 
   for (var i = 0; i < headings.length; i++) {
-    var text = normalize(headings[i].innerText || headings[i].textContent || '');
+    var text = normalize(
+      headings[i].innerText || headings[i].textContent || "",
+    );
     for (var j = 0; j < patterns.length; j++) {
       if (text.includes(patterns[j])) {
         return headings[i];
@@ -167,23 +303,33 @@ function findAddButton(sectionEl) {
    * Teste si un élément est un bouton "Ajouter"
    */
   function isAddBtn(el) {
-    var text = normalize(el.innerText || el.textContent || '');
-    var aria = normalize(el.getAttribute('aria-label') || '');
-    var title = normalize(el.getAttribute('title') || '');
+    var text = normalize(el.innerText || el.textContent || "");
+    var aria = normalize(el.getAttribute("aria-label") || "");
+    var title = normalize(el.getAttribute("title") || "");
     for (var j = 0; j < patterns.length; j++) {
-      if (text.includes(patterns[j]) || aria.includes(patterns[j]) || title.includes(patterns[j])) {
+      if (
+        text.includes(patterns[j]) ||
+        aria.includes(patterns[j]) ||
+        title.includes(patterns[j])
+      ) {
         return true;
       }
     }
     return false;
   }
 
-  // 1. Chercher dans le parent immédiat (3 niveaux)
+  // Sélecteur étendu pour SF (div.addRowButton, div[role=button], etc.)
+  var BTN_SELECTOR = 'button, a, [role="button"], span[onclick], div[onclick], .addRowButton, [class*="addRow"], [id*="addRow"]';
+
+  // 1. Chercher dans le parent immédiat (5 niveaux)
   var parent = sectionEl.parentElement;
   for (var level = 0; level < 5 && parent; level++) {
-    var btns = Array.from(parent.querySelectorAll('button, a, [role="button"], span[onclick], div[onclick]'));
+    var btns = Array.from(parent.querySelectorAll(BTN_SELECTOR));
     for (var i = 0; i < btns.length; i++) {
-      if (isAddBtn(btns[i])) return btns[i];
+      if (isAddBtn(btns[i])) {
+        Logger.debug("Bouton Ajouter trouvé (parent lvl " + level + "): " + (btns[i].title || btns[i].innerText || "").substring(0, 40));
+        return btns[i];
+      }
     }
     parent = parent.parentElement;
   }
@@ -193,16 +339,19 @@ function findAddButton(sectionEl) {
   var maxSib = 15;
   while (sibling && maxSib-- > 0) {
     if (isAddBtn(sibling)) return sibling;
-    var sibBtns = Array.from(sibling.querySelectorAll('button, a, [role="button"]'));
+    var sibBtns = Array.from(sibling.querySelectorAll(BTN_SELECTOR));
     for (var k = 0; k < sibBtns.length; k++) {
-      if (isAddBtn(sibBtns[k])) return sibBtns[k];
+      if (isAddBtn(sibBtns[k])) {
+        Logger.debug("Bouton Ajouter trouvé (sibling): " + (sibBtns[k].title || sibBtns[k].innerText || "").substring(0, 40));
+        return sibBtns[k];
+      }
     }
     sibling = sibling.nextElementSibling;
   }
 
   // 3. Fallback global : chercher dans toute la page le bouton "Ajouter"
   //    visible le plus proche du sectionEl (par position DOM)
-  var allBtns = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+  var allBtns = Array.from(document.querySelectorAll(BTN_SELECTOR));
   var sectionRect = sectionEl.getBoundingClientRect();
 
   var candidates = allBtns.filter(isAddBtn);
@@ -212,7 +361,10 @@ function findAddButton(sectionEl) {
   candidates.sort(function (a, b) {
     var ra = a.getBoundingClientRect();
     var rb = b.getBoundingClientRect();
-    return Math.abs(ra.top - sectionRect.bottom) - Math.abs(rb.top - sectionRect.bottom);
+    return (
+      Math.abs(ra.top - sectionRect.bottom) -
+      Math.abs(rb.top - sectionRect.bottom)
+    );
   });
 
   // Ne retourner que si c'est en dessous du header
@@ -240,32 +392,42 @@ function waitForNewFields(timeoutMs) {
  * @param {Object} subfields - Dictionnaire { key: [keywords] }
  * @param {Object} values    - Dictionnaire { key: valeur }
  */
-function fillSubfields(container, subfields, values) {
-  var inputs = Array.from(container.querySelectorAll('input:not([type="hidden"]), textarea, select'));
+async function fillSubfields(container, subfields, values) {
+  var inputs = Array.from(
+    container.querySelectorAll('input:not([type="hidden"]), textarea, select'),
+  );
   var filled = 0;
+  var DATE_KEYS = ["date_debut", "date_fin", "annee_obtention"];
 
-  inputs.forEach(function (el) {
-    if (shouldIgnore(el)) return;
+  for (var i = 0; i < inputs.length; i++) {
+    var el = inputs[i];
+    if (shouldIgnore(el)) continue;
 
     var fieldKey = detectSubfieldType(el, subfields);
-    if (!fieldKey || !values[fieldKey]) return;
+    if (!fieldKey || !values[fieldKey]) continue;
 
     var value = values[fieldKey];
 
     try {
-      if (el.tagName === 'SELECT') {
+      if (el.tagName === "SELECT") {
         fillSelectField(el, value);
-      } else if (el.tagName === 'TEXTAREA') {
+      } else if (el.tagName === "TEXTAREA") {
         fillTextareaField(el, value);
+      } else if (DATE_KEYS.indexOf(fieldKey) !== -1 || isDateField(el)) {
+        if (window.DateHandler) {
+          await DateHandler.fill(el, value);
+        } else {
+          await fillDateField(el, value);
+        }
       } else {
         fillInputField(el, value);
       }
       showFieldFeedback(el);
       filled++;
     } catch (err) {
-      Logger.error('Erreur remplissage sous-champ ' + fieldKey, err);
+      Logger.error("Erreur remplissage sous-champ " + fieldKey, err);
     }
-  });
+  }
 
   return filled;
 }
@@ -278,33 +440,37 @@ function fillSubfields(container, subfields, values) {
  */
 function detectSubfieldType(el, subfields) {
   var candidates = [
-    el.getAttribute('name') || '',
-    el.getAttribute('id') || '',
-    el.getAttribute('placeholder') || '',
-    el.getAttribute('aria-label') || '',
-    el.getAttribute('data-label') || ''
+    el.getAttribute("name") || "",
+    el.getAttribute("id") || "",
+    el.getAttribute("placeholder") || "",
+    el.getAttribute("aria-label") || "",
+    el.getAttribute("data-label") || "",
   ];
 
-  var id = el.getAttribute('id');
+  var id = el.getAttribute("id");
   if (id) {
     try {
       var label = document.querySelector('label[for="' + CSS.escape(id) + '"]');
-      if (label) candidates.push(label.innerText || '');
+      if (label) candidates.push(label.innerText || "");
     } catch (_) {}
   }
 
-  var parentLabel = el.closest('label');
+  var parentLabel = el.closest("label");
   if (parentLabel) {
     var clone = parentLabel.cloneNode(true);
-    clone.querySelectorAll('input, select, textarea').forEach(function (c) { c.remove(); });
-    candidates.push(clone.innerText || '');
+    clone.querySelectorAll("input, select, textarea").forEach(function (c) {
+      c.remove();
+    });
+    candidates.push(clone.innerText || "");
   }
 
   var parent = el.parentElement;
   if (parent) {
     var clone2 = parent.cloneNode(true);
-    clone2.querySelectorAll('input, select, textarea').forEach(function (c) { c.remove(); });
-    candidates.push((clone2.innerText || '').split('\n')[0]);
+    clone2.querySelectorAll("input, select, textarea").forEach(function (c) {
+      c.remove();
+    });
+    candidates.push((clone2.innerText || "").split("\n")[0]);
   }
 
   var normalizedCandidates = candidates.map(normalize).filter(Boolean);
@@ -340,51 +506,82 @@ async function fillExperienceSections(profil) {
   if (experiences.length === 0) return 0;
 
   // 1. Ouvrir l'accordéon si nécessaire (SuccessFactors, etc.)
-  var sectionEl = await expandSection('experience');
+  var sectionEl = await expandSection("experience");
   // Fallback : chercher le heading classique
-  if (!sectionEl) sectionEl = findSection('experience');
+  if (!sectionEl) sectionEl = findSection("experience");
   if (!sectionEl) {
-    Logger.log('Section expérience non trouvée sur cette page');
+    Logger.log("Section expérience non trouvée sur cette page");
     return 0;
   }
 
   var added = 0;
 
+  // Vérifier s'il y a déjà un formulaire vide existant (SF pré-crée souvent une entrée)
+  var existingContainer = findLatestDynamicForm(sectionEl);
+  var hasExistingEmpty = false;
+  if (existingContainer) {
+    var existingInputs = Array.from(
+      existingContainer.querySelectorAll('input:not([type="hidden"]), textarea, select')
+    ).filter(function (el) { return !shouldIgnore(el); });
+    var emptyCount = existingInputs.filter(function (el) {
+      if (el.tagName === "SELECT") {
+        var opt = el.options && el.options[el.selectedIndex];
+        var txt = opt ? (opt.text || "").toLowerCase() : "";
+        return !el.value || txt.includes("aucune") || txt.includes("select");
+      }
+      return !el.value || el.value.trim() === "";
+    }).length;
+    hasExistingEmpty = emptyCount >= 2; // Au moins 2 champs vides → formulaire vide
+  }
+
   for (var i = 0; i < experiences.length; i++) {
     var exp = experiences[i];
     if (!exp.poste && !exp.entreprise) continue;
 
-    var addBtn = findAddButton(sectionEl);
-    if (!addBtn) {
-      Logger.warn('Bouton Ajouter (expérience) non trouvé');
-      break;
-    }
+    var container;
 
-    addBtn.click();
-    await waitForNewFields(2000); // SuccessFactors ouvre une modale lente
+    if (i === 0 && hasExistingEmpty && existingContainer) {
+      // Première expérience : remplir le formulaire déjà visible
+      container = existingContainer;
+      Logger.log("Formulaire expérience existant trouvé, remplissage direct");
+    } else {
+      var addBtn = findAddButton(sectionEl);
+      if (!addBtn) {
+        Logger.warn("Bouton Ajouter (expérience) non trouvé");
+        break;
+      }
 
-    // Trouver le nouveau formulaire apparu (modale ou zone inline)
-    var container = findLatestDynamicForm(sectionEl);
-    if (!container) {
-      Logger.warn('Container du formulaire expérience non trouvé');
-      continue;
+      // Clic robuste pour SF (juic.fire, etc.)
+      Logger.debug("Clic sur Ajouter (exp): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
+      addBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      addBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      addBtn.click();
+      await waitForNewFields(2500);
+
+      container = findLatestDynamicForm(sectionEl);
+      if (!container) {
+        Logger.warn("Container du formulaire expérience non trouvé");
+        continue;
+      }
     }
 
     var values = {
-      poste:       exp.poste       || '',
-      entreprise:  exp.entreprise  || '',
-      date_debut:  exp.dateDebut   || '',
-      date_fin:    exp.dateFin     || '',
-      lieu:        exp.lieu        || '',
-      description: exp.description || ''
+      poste: exp.poste || "",
+      entreprise: exp.entreprise || "",
+      date_debut: exp.dateDebut || "",
+      date_fin: exp.dateFin || "",
+      lieu: exp.lieu || "",
+      description: exp.description || "",
+      employeur_actuel: exp.actuel ? "Oui" : "Non",
     };
 
-    var filled = fillSubfields(container, EXPERIENCE_SUBFIELDS, values);
-    Logger.log('Expérience : ' + filled + ' champ(s) rempli(s)');
+    var filled = await fillSubfields(container, EXPERIENCE_SUBFIELDS, values);
+    Logger.log("Expérience : " + filled + " champ(s) rempli(s)");
     added++;
   }
 
-  Logger.log(added + ' expérience(s) ajoutée(s)');
+  Logger.log(added + " expérience(s) ajoutée(s)");
   return added;
 }
 
@@ -399,10 +596,10 @@ async function fillFormationSections(profil) {
   if (formations.length === 0) return 0;
 
   // 1. Ouvrir les deux accordéons (parcours académique + formations et certifications)
-  var sectionEl = await expandSection('formation');
-  if (!sectionEl) sectionEl = findSection('formation');
+  var sectionEl = await expandSection("formation");
+  if (!sectionEl) sectionEl = findSection("formation");
   if (!sectionEl) {
-    Logger.log('Section formation non trouvée sur cette page');
+    Logger.log("Section formation non trouvée sur cette page");
     return 0;
   }
 
@@ -410,32 +607,40 @@ async function fillFormationSections(profil) {
 
   for (var i = 0; i < formations.length; i++) {
     var form = formations[i];
-    if (!form.diplome && !form.etablissement) continue;
+    if (!form.diplome && !form.etablissement && !form.niveauEtudes && !form.mention) continue;
 
     var addBtn = findAddButton(sectionEl);
     if (!addBtn) {
-      Logger.warn('Bouton Ajouter (formation) non trouvé');
+      Logger.warn("Bouton Ajouter (formation) non trouvé");
       break;
     }
 
+    // Clic robuste pour SF (juic.fire, etc.)
+    Logger.debug("Clic sur Ajouter (formation): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
+    addBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    addBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     addBtn.click();
-    await waitForNewFields(900);
+    await waitForNewFields(2500);
 
     var container = findLatestDynamicForm(sectionEl);
     if (!container) continue;
 
     var values = {
-      diplome:          form.diplome          || form.niveauEtudes || '',
-      etablissement:    form.etablissement    || '',
-      annee_obtention:  form.annee            || '',
-      domaine:          form.mention          || ''
+      nom_formation: form.diplome || form.niveauEtudes || "",
+      diplome: form.niveauEtudes || form.diplome || "",
+      diplome_plus_eleve: form.niveauEtudes || form.diplome || "",
+      etablissement: form.etablissement || "",
+      annee_obtention: form.annee || form.dateFin || "",
+      domaine: form.mention || "",
+      country_education: "France",
     };
 
-    fillSubfields(container, FORMATION_SUBFIELDS, values);
+    await fillSubfields(container, FORMATION_SUBFIELDS, values);
     added++;
   }
 
-  Logger.log(added + ' formation(s) ajoutée(s)');
+  Logger.log(added + " formation(s) ajoutée(s)");
   return added;
 }
 
@@ -447,13 +652,17 @@ async function fillFormationSections(profil) {
  * @returns {Element|null}
  */
 function findLatestDynamicForm(sectionEl) {
-  var container = sectionEl.closest('section, fieldset, [class*="section"], details') || sectionEl.parentElement;
+  var container =
+    sectionEl.closest('section, fieldset, [class*="section"], details') ||
+    sectionEl.parentElement;
   if (!container) return null;
 
   // Chercher tous les containers de formulaire dans la section
-  var formContainers = Array.from(container.querySelectorAll(
-    'fieldset, [class*="form-group"], [class*="entry"], [class*="item"], [class*="row"], div[data-automation-id]'
-  ));
+  var formContainers = Array.from(
+    container.querySelectorAll(
+      'fieldset, [class*="form-group"], [class*="entry"], [class*="item"], [class*="row"], div[data-automation-id]',
+    ),
+  );
 
   // Retourner le dernier (le plus récemment ajouté)
   if (formContainers.length > 0) {

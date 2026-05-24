@@ -1,4 +1,4 @@
-﻿package com.cvgen.backend.generation.application;
+package com.cvgen.backend.generation.application;
 
 import com.cvgen.backend.generation.application.exception.PdfCompilationException;
 import lombok.extern.slf4j.Slf4j;

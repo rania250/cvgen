@@ -1,221 +1,320 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CVGen — Options</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CVGen — Options</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-    body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      font-size: 14px;
-      background: #F8FAFC;
-      color: #1E293B;
-      padding: 32px;
-      max-width: 600px;
-      margin: 0 auto;
-    }
+      body {
+        font-family:
+          "Inter",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 14px;
+        background: #f8fafc;
+        color: #1e293b;
+        padding: 32px;
+        max-width: 600px;
+        margin: 0 auto;
+      }
 
-    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: #1B2A4A; }
-    .subtitle { color: #64748B; font-size: 13px; margin-bottom: 28px; }
+      h1 {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 4px;
+        color: #1b2a4a;
+      }
+      .subtitle {
+        color: #64748b;
+        font-size: 13px;
+        margin-bottom: 28px;
+      }
 
-    .section {
-      background: white;
-      border: 1px solid #E2E8F0;
-      border-radius: 10px;
-      padding: 20px 24px;
-      margin-bottom: 20px;
-    }
+      .section {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 20px 24px;
+        margin-bottom: 20px;
+      }
 
-    .section-title {
-      font-size: 13px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #64748B;
-      margin-bottom: 16px;
-    }
+      .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        margin-bottom: 16px;
+      }
 
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 16px;
-    }
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 16px;
+      }
 
-    .form-group:last-child { margin-bottom: 0; }
+      .form-group:last-child {
+        margin-bottom: 0;
+      }
 
-    label { font-size: 13px; font-weight: 500; color: #374151; }
+      label {
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+      }
 
-    .hint { font-size: 11px; color: #94A3B8; }
+      .hint {
+        font-size: 11px;
+        color: #94a3b8;
+      }
 
-    input[type="url"], input[type="text"] {
-      border: 1px solid #CBD5E1;
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 13px;
-      font-family: monospace;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      width: 100%;
-      color: #1E293B;
-    }
+      input[type="url"],
+      input[type="text"] {
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-family: monospace;
+        outline: none;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+        width: 100%;
+        color: #1e293b;
+      }
 
-    input:focus {
-      border-color: #3B82F6;
-      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
-    }
+      input:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+      }
 
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 8px 0;
-    }
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 0;
+      }
 
-    .toggle-label { display: flex; flex-direction: column; gap: 2px; }
-    .toggle-label span { font-size: 13px; font-weight: 500; }
-    .toggle-label small { font-size: 11px; color: #94A3B8; }
+      .toggle-label {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .toggle-label span {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .toggle-label small {
+        font-size: 11px;
+        color: #94a3b8;
+      }
 
-    /* Toggle switch */
-    .switch { position: relative; display: inline-flex; width: 40px; height: 22px; flex-shrink: 0; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider {
-      position: absolute; inset: 0; cursor: pointer;
-      background: #CBD5E1; border-radius: 22px; transition: background 0.2s;
-    }
-    .slider::before {
-      content: ''; position: absolute; height: 16px; width: 16px;
-      left: 3px; bottom: 3px; background: white; border-radius: 50%;
-      transition: transform 0.2s;
-    }
-    .switch input:checked + .slider { background: #3B82F6; }
-    .switch input:checked + .slider::before { transform: translateX(18px); }
+      /* Toggle switch */
+      .switch {
+        position: relative;
+        display: inline-flex;
+        width: 40px;
+        height: 22px;
+        flex-shrink: 0;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        inset: 0;
+        cursor: pointer;
+        background: #cbd5e1;
+        border-radius: 22px;
+        transition: background 0.2s;
+      }
+      .slider::before {
+        content: "";
+        position: absolute;
+        height: 16px;
+        width: 16px;
+        left: 3px;
+        bottom: 3px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.2s;
+      }
+      .switch input:checked + .slider {
+        background: #3b82f6;
+      }
+      .switch input:checked + .slider::before {
+        transform: translateX(18px);
+      }
 
-    .btn-group {
-      display: flex;
-      gap: 10px;
-      margin-top: 4px;
-    }
+      .btn-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 4px;
+      }
 
-    .btn {
-      padding: 8px 18px;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      font-family: inherit;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
+      .btn {
+        padding: 8px 18px;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
 
-    .btn-primary { background: #3B82F6; color: white; }
-    .btn-primary:hover { background: #2563EB; }
-    .btn-danger  { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
-    .btn-danger:hover { background: #FEE2E2; }
+      .btn-primary {
+        background: #3b82f6;
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #2563eb;
+      }
+      .btn-danger {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+      }
+      .btn-danger:hover {
+        background: #fee2e2;
+      }
 
-    .alert {
-      border-radius: 6px;
-      padding: 10px 14px;
-      font-size: 12px;
-      margin-top: 12px;
-      display: none;
-    }
+      .alert {
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-size: 12px;
+        margin-top: 12px;
+        display: none;
+      }
 
-    .alert-success { background: #F0FDF4; border: 1px solid #BBF7D0; color: #166534; }
-    .alert-error   { background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; }
+      .alert-success {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #166534;
+      }
+      .alert-error {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+      }
 
-    footer {
-      text-align: center;
-      color: #94A3B8;
-      font-size: 11px;
-      margin-top: 28px;
-    }
-  </style>
-</head>
-<body>
+      footer {
+        text-align: center;
+        color: #94a3b8;
+        font-size: 11px;
+        margin-top: 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CVGen — Options</h1>
+    <p class="subtitle">Configuration de l'extension autofill CVGen.</p>
 
-  <h1>CVGen — Options</h1>
-  <p class="subtitle">Configuration de l'extension autofill CVGen.</p>
+    <!-- API -->
+    <div class="section">
+      <div class="section-title">API</div>
 
-  <!-- API -->
-  <div class="section">
-    <div class="section-title">API</div>
-
-    <div class="form-group">
-      <label for="api-url">URL de base de l'API CVGen</label>
-      <p class="hint">Modifiez uniquement pour le développement local (ex&nbsp;: http://localhost:8080).</p>
-      <input type="url" id="api-url" placeholder="https://api.cvgen.fr" spellcheck="false" />
-    </div>
-
-    <div class="btn-group">
-      <button class="btn btn-primary" id="btn-save-api">Enregistrer</button>
-      <button class="btn btn-danger" id="btn-reset-api">Réinitialiser</button>
-    </div>
-    <div class="alert alert-success" id="api-success">URL enregistrée.</div>
-    <div class="alert alert-error"   id="api-error">URL invalide.</div>
-  </div>
-
-  <!-- Comportement -->
-  <div class="section">
-    <div class="section-title">Comportement</div>
-
-    <div class="toggle-row">
-      <div class="toggle-label">
-        <span>Remplir automatiquement au chargement</span>
-        <small>Lance le remplissage dès la détection d'un formulaire</small>
+      <div class="form-group">
+        <label for="api-url">URL de base de l'API CVGen</label>
+        <p class="hint">
+          Modifiez uniquement pour le développement local (ex&nbsp;:
+          http://localhost:8080).
+        </p>
+        <input
+          type="url"
+          id="api-url"
+          placeholder="https://api.cvgen.fr"
+          spellcheck="false"
+        />
       </div>
-      <label class="switch">
-        <input type="checkbox" id="pref-auto-fill" />
-        <span class="slider"></span>
-      </label>
-    </div>
 
-    <div class="toggle-row">
-      <div class="toggle-label">
-        <span>Écraser les champs déjà remplis</span>
-        <small>Si désactivé, les champs existants sont ignorés</small>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btn-save-api">Enregistrer</button>
+        <button class="btn btn-danger" id="btn-reset-api">Réinitialiser</button>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="pref-overwrite" />
-        <span class="slider"></span>
-      </label>
+      <div class="alert alert-success" id="api-success">URL enregistrée.</div>
+      <div class="alert alert-error" id="api-error">URL invalide.</div>
     </div>
 
-    <div class="toggle-row">
-      <div class="toggle-label">
-        <span>Afficher les toasts de confirmation</span>
-        <small>Notification visuelle après chaque remplissage</small>
+    <!-- Comportement -->
+    <div class="section">
+      <div class="section-title">Comportement</div>
+
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <span>Remplir automatiquement au chargement</span>
+          <small>Lance le remplissage dès la détection d'un formulaire</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="pref-auto-fill" />
+          <span class="slider"></span>
+        </label>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="pref-toast" checked />
-        <span class="slider"></span>
-      </label>
+
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <span>Écraser les champs déjà remplis</span>
+          <small>Si désactivé, les champs existants sont ignorés</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="pref-overwrite" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <span>Afficher les toasts de confirmation</span>
+          <small>Notification visuelle après chaque remplissage</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="pref-toast" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="btn-group" style="margin-top: 14px">
+        <button class="btn btn-primary" id="btn-save-prefs">
+          Enregistrer les préférences
+        </button>
+      </div>
+      <div class="alert alert-success" id="prefs-success">
+        Préférences enregistrées.
+      </div>
     </div>
 
-    <div class="btn-group" style="margin-top:14px">
-      <button class="btn btn-primary" id="btn-save-prefs">Enregistrer les préférences</button>
+    <!-- Données -->
+    <div class="section">
+      <div class="section-title">Données locales</div>
+      <p style="font-size: 12px; color: #64748b; margin-bottom: 12px">
+        Vider le cache supprime le profil et le token stockés localement. Vous
+        devrez vous reconnecter.
+      </p>
+      <button class="btn btn-danger" id="btn-clear-cache">
+        Vider le cache
+      </button>
+      <div class="alert alert-success" id="cache-success">
+        Cache vidé. Reconnectez-vous dans le popup.
+      </div>
     </div>
-    <div class="alert alert-success" id="prefs-success">Préférences enregistrées.</div>
-  </div>
 
-  <!-- Données -->
-  <div class="section">
-    <div class="section-title">Données locales</div>
-    <p style="font-size:12px;color:#64748B;margin-bottom:12px">
-      Vider le cache supprime le profil et le token stockés localement.
-      Vous devrez vous reconnecter.
-    </p>
-    <button class="btn btn-danger" id="btn-clear-cache">Vider le cache</button>
-    <div class="alert alert-success" id="cache-success">Cache vidé. Reconnectez-vous dans le popup.</div>
-  </div>
+    <footer>CVGen Extension v1.0.0</footer>
 
-  <footer>CVGen Extension v1.0.0</footer>
-
-  <script src="../utils/logger.js"></script>
-  <script src="../utils/storage.js"></script>
-  <script src="options.js"></script>
-</body>
+    <script src="../utils/logger.js"></script>
+    <script src="../utils/storage.js"></script>
+    <script src="options.js"></script>
+  </body>
 </html>

@@ -177,24 +177,6 @@
                 </configuration>
             </plugin>
 
-            <!-- Plugin Dotenv : charge les variables d'environnement depuis .env -->
-            <plugin>
-                <groupId>io.github.cdimascio</groupId>
-                <artifactId>dotenv-maven-plugin</artifactId>
-                <version>${dotenv.version}</version>
-                <executions>
-                    <execution>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>dotenv</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <dotenvFile>../.env</dotenvFile>
-                </configuration>
-            </plugin>
-
             <!-- Compilateur : ordre des annotation processors important
                  1) Lombok       (génère getters/setters/builders)
                  2) MapStruct    (utilise les accesseurs générés par Lombok)

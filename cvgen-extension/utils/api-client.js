@@ -5,7 +5,7 @@
  */
 
 // Valeur par défaut — changer ici pour le dev local, ou via la page Options
-var API_BASE_URL = 'http://localhost:8080';
+var API_BASE_URL = "http://localhost:8080";
 
 /**
  * Effectue un appel à l'API CVGen avec le token JWT Bearer.
@@ -25,10 +25,10 @@ async function apiFetch(endpoint, options) {
 
   const headers = Object.assign(
     {
-      'Content-Type': 'application/json'
+      "Content-Type": "application/json",
     },
-    token ? { 'Authorization': 'Bearer ' + token } : {},
-    options.headers || {}
+    token ? { Authorization: "Bearer " + token } : {},
+    options.headers || {},
   );
 
   const url = baseUrl + endpoint;
@@ -37,30 +37,32 @@ async function apiFetch(endpoint, options) {
   try {
     response = await fetch(url, Object.assign({}, options, { headers }));
   } catch (networkError) {
-    Logger.error('Erreur réseau vers ' + url, networkError);
-    throw new Error('Impossible de joindre l\'API CVGen. Vérifiez votre connexion.');
+    Logger.error("Erreur réseau vers " + url, networkError);
+    throw new Error(
+      "Impossible de joindre l'API CVGen. Vérifiez votre connexion.",
+    );
   }
 
   if (response.status === 401) {
-    Logger.warn('Token expiré ou invalide — déconnexion requise');
+    Logger.warn("Token expiré ou invalide — déconnexion requise");
     // Notifier le popup si ouvert
     try {
-      chrome.runtime.sendMessage({ type: 'TOKEN_EXPIRED' });
+      chrome.runtime.sendMessage({ type: "TOKEN_EXPIRED" });
     } catch (_) {
       // Popup peut être fermé — pas d'erreur
     }
-    throw new Error('Session expirée. Veuillez vous reconnecter.');
+    throw new Error("Session expirée. Veuillez vous reconnecter.");
   }
 
   if (!response.ok) {
-    let errorBody = '';
+    let errorBody = "";
     try {
       const errJson = await response.json();
       errorBody = errJson.message || JSON.stringify(errJson);
     } catch (_) {
       errorBody = response.statusText;
     }
-    throw new Error('Erreur API ' + response.status + ': ' + errorBody);
+    throw new Error("Erreur API " + response.status + ": " + errorBody);
   }
 
   return response.json();

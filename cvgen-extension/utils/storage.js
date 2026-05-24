@@ -5,7 +5,6 @@
  */
 
 var Storage = {
-
   /**
    * Récupère une valeur par clé.
    * @param {string} key
@@ -46,47 +45,47 @@ var Storage = {
   // ── Helpers métier ────────────────────────────────────────────────────────
 
   async getToken() {
-    return this.get('token');
+    return this.get("token");
   },
 
   async setToken(token) {
-    return this.set('token', token);
+    return this.set("token", token);
   },
 
   async removeToken() {
-    return this.remove('token');
+    return this.remove("token");
   },
 
   async getUser() {
-    return this.get('user');
+    return this.get("user");
   },
 
   async setUser(user) {
-    return this.set('user', user);
+    return this.set("user", user);
   },
 
   async getProfile() {
-    return this.get('profil');
+    return this.get("profil");
   },
 
   async setProfile(profil) {
-    return this.set('profil', profil);
+    return this.set("profil", profil);
   },
 
   async getProfileSyncDate() {
-    return this.get('profileSyncDate');
+    return this.get("profileSyncDate");
   },
 
   async setProfileSyncDate(date) {
-    return this.set('profileSyncDate', date);
+    return this.set("profileSyncDate", date);
   },
 
   async getCoverLetter() {
-    return this.get('lettreMutation');
+    return this.get("lettreMutation");
   },
 
   async setCoverLetter(lettre) {
-    return this.set('lettreMutation', lettre);
+    return this.set("lettreMutation", lettre);
   },
 
   /**
@@ -94,11 +93,11 @@ var Storage = {
    * @returns {Promise<string>}
    */
   async getApiBaseUrl() {
-    const url = await this.get('apiBaseUrl');
-    return url || 'https://api.cvgen.fr';
+    const url = await this.get("apiBaseUrl");
+    return url || "https://api.cvgen.fr";
   },
 
   async setApiBaseUrl(url) {
-    return this.set('apiBaseUrl', url);
-  }
+    return this.set("apiBaseUrl", url);
+  },
 };
