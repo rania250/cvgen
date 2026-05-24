@@ -650,22 +650,63 @@ async function fillExperienceSections(profil) {
  * Retourne TOUS les containers d'entrées (records) déjà présents dans une section
  * dynamique (utile pour ne pas en recréer si l'utilisateur a cliqué Remplir 2 fois).
  *
+ * Stratégie en 2 passes :
+ *  1. Compter les boutons "Supprimer/Delete/🗑" — chaque entrée en a un.
+ *     Remonter à l'ancêtre commun qui contient au moins 1 input.
+ *  2. Si la passe 1 ne donne rien, fallback sur les sélecteurs de classes.
+ *
  * @param {Element} sectionEl
  * @returns {Element[]}
  */
 function findAllDynamicContainers(sectionEl) {
-  var container =
+  var scope =
     sectionEl.closest('section, fieldset, [class*="section"], details') ||
     sectionEl.parentElement;
-  if (!container) return [];
+  if (!scope) return [];
 
+  // ── Passe 1 : via les boutons Supprimer (très fiable sur Taleo/SF) ────────
+  var deletePatterns = [
+    "supprimer", "delete", "remove", "retirer", "enlever",
+  ];
+  var deleteBtns = Array.from(
+    scope.querySelectorAll('button, a, [role="button"], i, span, [class*="delete"], [class*="remove"], [class*="trash"]')
+  ).filter(function (el) {
+    var t = normalize(el.innerText || el.textContent || "");
+    var a = normalize(el.getAttribute("aria-label") || "");
+    var ti = normalize(el.getAttribute("title") || "");
+    for (var p = 0; p < deletePatterns.length; p++) {
+      if (t === deletePatterns[p] || a.includes(deletePatterns[p]) || ti.includes(deletePatterns[p])) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  var byDelete = [];
+  for (var d = 0; d < deleteBtns.length; d++) {
+    // Remonter aux 6 niveaux pour trouver le container qui possède au moins
+    // 1 input visible, sans être le scope global de la section.
+    var parent = deleteBtns[d].parentElement;
+    for (var lvl = 0; lvl < 6 && parent; lvl++) {
+      if (parent === scope) break;
+      var hasInput = parent.querySelector('input:not([type="hidden"]), textarea, select');
+      if (hasInput && byDelete.indexOf(parent) === -1) {
+        byDelete.push(parent);
+        break;
+      }
+      parent = parent.parentElement;
+    }
+  }
+  if (byDelete.length > 0) return byDelete;
+
+  // ── Passe 2 : fallback par sélecteurs de classes ──────────────────────────
   var found = Array.from(
-    container.querySelectorAll(
+    scope.querySelectorAll(
       'fieldset, [class*="entry"], [class*="record"], [class*="item-row"], ' +
+      '[class*="ftl-record"], [class*="ftl-row"], [class*="experience-block"], ' +
       'li[class*="item"], div[data-automation-id*="formField"]'
     )
   ).filter(function (el) {
-    // Doit contenir au moins 1 input visible
     return el.querySelector('input:not([type="hidden"]), textarea, select') !== null;
   });
   return found;

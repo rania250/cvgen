@@ -212,19 +212,33 @@
       "background:#0b5; color:white; font-weight:bold; padding:4px 8px; border-radius:3px;"
     );
 
+    // Dump complet et VISIBLE de toutes les expériences et formations
+    // (utile pour debug : voir ce que le backend a vraiment renvoyé)
+    console.log(
+      "%c[CVGen] EXPÉRIENCES (" + (profil.experiences || []).length + ")",
+      "background:#06b; color:white; font-weight:bold; padding:2px 6px;"
+    );
+    if (profil.experiences && profil.experiences.length > 0) {
+      console.table(profil.experiences);
+    } else {
+      console.warn("[CVGen] ⚠ AUCUNE expérience dans le profil ! Vérifie ton profil sur cvgen.fr");
+    }
+    console.log(
+      "%c[CVGen] FORMATIONS (" + (profil.formations || []).length + ")",
+      "background:#06b; color:white; font-weight:bold; padding:2px 6px;"
+    );
+    if (profil.formations && profil.formations.length > 0) {
+      console.table(profil.formations);
+    } else {
+      console.warn("[CVGen] ⚠ AUCUNE formation dans le profil !");
+    }
+
     Logger.log(
       "Profil chargé — " +
         (rawProfil.experiences ? rawProfil.experiences.length : 0) + " exp, " +
         (rawProfil.educations ? rawProfil.educations.length : 0) + " formations"
     );
     Logger.debug("API brut — clés: " + Object.keys(rawProfil).join(", "));
-    Logger.debug("Normalisé — identite OK: " + !!(profil.identite && profil.identite.email));
-    if (profil.formations && profil.formations[0]) {
-      Logger.debug("Normalisé — 1ère formation", profil.formations[0]);
-    }
-    if (profil.experiences && profil.experiences[0]) {
-      Logger.debug("Normalisé — 1ère expérience", profil.experiences[0]);
-    }
 
     // 2. Ouvrir les accordéons (SuccessFactors, etc.) et attendre le chargement Ajax
     await expandProfileAccordions();
