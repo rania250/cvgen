@@ -599,22 +599,37 @@ function waitForNewFields(timeoutMs, scope) {
     ).length;
 
     var resolved = false;
+    var firstChangeAt = 0;
+    var stabilityMs = 500; // attendre que le DOM se stabilise (selects async)
+    var stabilityTimer = null;
+
     function finish() {
       if (resolved) return;
       resolved = true;
       try { observer.disconnect(); } catch (_) {}
+      if (stabilityTimer) clearTimeout(stabilityTimer);
       // Petit délai supplémentaire pour les animations CSS et le rendu
       setTimeout(resolve, 200);
+    }
+
+    function scheduleStabilityCheck() {
+      if (stabilityTimer) clearTimeout(stabilityTimer);
+      stabilityTimer = setTimeout(function () { finish(); }, stabilityMs);
     }
 
     var observer = new MutationObserver(function () {
       var current = scope.querySelectorAll(
         'input:not([type="hidden"]), textarea, select'
       ).length;
-      // Aussi déclencher si un modal/dialog vient d'apparaître
       var dialog = document.querySelector('[role="dialog"]:not([aria-hidden="true"])');
-      if (current > initialCount || (dialog && dialog.querySelector('input, textarea, select'))) {
-        finish();
+      var hasNew =
+        current > initialCount ||
+        (dialog && dialog.querySelector('input, textarea, select'));
+      if (hasNew) {
+        if (!firstChangeAt) firstChangeAt = Date.now();
+        // Au lieu de finir tout de suite, on relance le compteur de stabilité
+        // pour attendre que SF finisse de charger ses selects async.
+        scheduleStabilityCheck();
       }
     });
     observer.observe(scope, { childList: true, subtree: true, attributes: true });
@@ -785,23 +800,19 @@ async function fillExperienceSections(profil) {
       }
 
       var beforeSnapshot = snapshotInputs();
+      var beforeDeletes = snapshotDeleteButtons();
       Logger.log(
         "Clic Ajouter exp #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
-      await waitForNewFields(3500);
+      await waitForNewFields(5000);
 
-      var newContainer = findContainerOfNewInputs(beforeSnapshot);
+      var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
         Logger.warn("Clic Ajouter exp n'a créé aucun nouvel input — arrêt");
         break;
       }
-      Logger.log(
-        "Nouveau container expérience : <" + newContainer.tagName.toLowerCase() +
-        " class='" + (newContainer.className || "").substring(0, 60) + "'> avec " +
-        newContainer.querySelectorAll('input:not([type="hidden"]), textarea, select').length + " input(s)"
-      );
       container = newContainer;
     }
 
@@ -836,29 +847,82 @@ function snapshotInputs() {
 }
 
 /**
+ * Snapshot des boutons "Supprimer" présents avant un clic Ajouter.
+ * Permet d'identifier ensuite le NOUVEAU bouton Supprimer = celui de
+ * l'entrée fraîchement créée.
+ *
+ * @returns {Set<Element>}
+ */
+function snapshotDeleteButtons() {
+  var set = new Set();
+  findDeleteButtons(document.body).forEach(function (b) { set.add(b); });
+  return set;
+}
+
+/**
  * Compare le DOM avant/après un clic Ajouter et retourne le container
- * qui regroupe les inputs de la NOUVELLE entrée uniquement.
+ * de la NOUVELLE entrée. Stratégie principale : on cherche le nouveau
+ * bouton "Supprimer" (unique par entrée, apparaît immédiatement) et on
+ * remonte pour trouver le plus grand ancêtre qui contient ce Supprimer
+ * SANS contenir d'autres boutons Supprimer.
  *
- * Stratégie :
- *  1. Calcule le LCA (Least Common Ancestor) des nouveaux inputs
- *  2. Compte les boutons "Supprimer/Delete/Remove" dans ce LCA :
- *     - Si ≤ 1 → c'est une entrée unique → retourne le LCA
- *     - Si ≥ 2 → le LCA englobe plusieurs entrées (cas re-render fréquent
- *       sur SuccessFactors qui re-render toute la section à chaque clic).
- *       Retourne le container parent du DERNIER bouton Supprimer.
+ * Fallback (cas sans bouton Supprimer) : LCA des nouveaux inputs.
  *
- * @param {Set<Element>} beforeSet - snapshot d'avant clic (snapshotInputs())
+ * @param {Set<Element>} beforeInputSet  - snapshot des inputs (snapshotInputs())
+ * @param {Set<Element>} beforeDeleteSet - snapshot des Supprimer (snapshotDeleteButtons())
  * @returns {Element|null}
  */
-function findContainerOfNewInputs(beforeSet) {
+function findContainerOfNewEntry(beforeInputSet, beforeDeleteSet) {
+  // ── Stratégie 1 : nouveau bouton Supprimer ──
+  if (beforeDeleteSet) {
+    var nowDeletes = findDeleteButtons(document.body);
+    var newDeletes = nowDeletes.filter(function (b) { return !beforeDeleteSet.has(b); });
+
+    if (newDeletes.length > 0) {
+      // Prendre le DERNIER nouveau Supprimer (l'entrée la plus récente)
+      var lastDelete = newDeletes[newDeletes.length - 1];
+      var otherDeletes = nowDeletes.filter(function (b) { return b !== lastDelete; });
+
+      // Remonter pour trouver le PLUS GRAND ancêtre qui :
+      //  - contient ce nouveau Supprimer
+      //  - contient au moins 1 input
+      //  - ne contient AUCUN autre bouton Supprimer (= isolé à cette entrée)
+      var bestContainer = null;
+      var container = lastDelete.parentElement;
+      while (container && container !== document.body) {
+        var hasInput = container.querySelector(
+          'input:not([type="hidden"]), textarea, select'
+        );
+        var hasOtherDelete = otherDeletes.some(function (b) {
+          return container.contains(b);
+        });
+        if (hasOtherDelete) break; // ne pas remonter plus haut
+        if (hasInput) bestContainer = container;
+        container = container.parentElement;
+      }
+      if (bestContainer) {
+        var inputCount = bestContainer.querySelectorAll(
+          'input:not([type="hidden"]), textarea, select'
+        ).length;
+        Logger.log(
+          "Container nouvelle entrée trouvé via bouton Supprimer : <" +
+          bestContainer.tagName.toLowerCase() +
+          " class='" + (bestContainer.className || "").substring(0, 60) +
+          "'> avec " + inputCount + " input(s)"
+        );
+        return bestContainer;
+      }
+    }
+  }
+
+  // ── Stratégie 2 (fallback) : LCA des nouveaux inputs ──
   var nowInputs = Array.from(
     document.querySelectorAll('input:not([type="hidden"]), textarea, select')
   );
-  var newInputs = nowInputs.filter(function (el) { return !beforeSet.has(el); });
+  var newInputs = nowInputs.filter(function (el) { return !beforeInputSet.has(el); });
 
   if (newInputs.length === 0) return null;
 
-  // LCA des nouveaux inputs
   var firstChain = [];
   var node = newInputs[0];
   while (node && node !== document.body) {
@@ -876,38 +940,6 @@ function findContainerOfNewInputs(beforeSet) {
       }
     }
     if (containsAll) { lca = candidate; break; }
-  }
-  if (!lca) return null;
-
-  // Détecter combien d'entrées le LCA contient via les boutons "Supprimer"
-  var deleteBtns = findDeleteButtons(lca);
-
-  if (deleteBtns.length <= 1) {
-    return lca;
-  }
-
-  Logger.log(
-    "LCA contient " + deleteBtns.length + " boutons Supprimer (= " +
-    deleteBtns.length + " entrées) — on isole la dernière"
-  );
-
-  // Trouve le container parent du DERNIER Supprimer qui contient des inputs
-  // et qui ne contient AUCUN autre bouton Supprimer.
-  var lastDelete = deleteBtns[deleteBtns.length - 1];
-  var container = lastDelete.parentElement;
-  while (container && container !== lca && container !== document.body) {
-    var hasInputs = container.querySelector(
-      'input:not([type="hidden"]), textarea, select'
-    );
-    if (hasInputs) {
-      var otherDeletes = findDeleteButtons(container).filter(function (b) {
-        return b !== lastDelete;
-      });
-      if (otherDeletes.length === 0) {
-        return container;
-      }
-    }
-    container = container.parentElement;
   }
   return lca;
 }
@@ -1049,23 +1081,19 @@ async function fillFormationSections(profil) {
       }
 
       var beforeSnapshot = snapshotInputs();
+      var beforeDeletes = snapshotDeleteButtons();
       Logger.log(
         "Clic Ajouter formation #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'>"
       );
       clickElementRobust(addBtn);
-      await waitForNewFields(3500);
+      await waitForNewFields(5000);
 
-      var newContainer = findContainerOfNewInputs(beforeSnapshot);
+      var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
         Logger.warn("Clic Ajouter formation n'a créé aucun nouvel input — arrêt");
         break;
       }
-      Logger.log(
-        "Nouveau container formation : <" + newContainer.tagName.toLowerCase() +
-        " class='" + (newContainer.className || "").substring(0, 60) + "'> avec " +
-        newContainer.querySelectorAll('input:not([type="hidden"]), textarea, select').length + " input(s)"
-      );
       container = newContainer;
     }
 
