@@ -27,6 +27,21 @@ function normalize(str) {
 
 // ─── Dictionnaire de mappings FR + EN ────────────────────────────────────────
 
+// Patterns qui doivent IGNORER le champ (jamais matché à un type CVGen).
+// Vérifiés en priorité absolue pour éviter les faux positifs type "deuxième
+// prénom" matché à "prénom", ou "préférence" matché à "prénom".
+var SKIP_PATTERNS = [
+  "deuxieme prenom",
+  "deuxième prénom",
+  "middle name",
+  "second name",
+  "nom de jeune fille",
+  "maiden name",
+  "prefere",
+  "préféré",
+  "preferences",
+];
+
 var FIELD_MAPPINGS = {
   // ── IDENTITÉ ──────────────────────────────────────────────────────────────
 
@@ -62,7 +77,6 @@ var FIELD_MAPPINGS = {
     "nom *",
     "votre nom",
     "nom officiel",
-    "deuxième prénom officiel",
     "last name",
     "lastname",
     "surname",
@@ -781,6 +795,16 @@ function detectFieldType(element) {
   var normalizedCandidates = candidates.map(normalize).filter(function (c) {
     return c.length > 0;
   });
+
+  // Passe 0 : si un candidat correspond à un SKIP_PATTERN, on ignore le champ
+  // (ex: "Deuxième prénom officiel" ne doit JAMAIS être typé `prenom` ou `nom`)
+  var normalizedSkips = SKIP_PATTERNS.map(normalize);
+  for (var s = 0; s < normalizedCandidates.length; s++) {
+    var candS = normalizedCandidates[s];
+    for (var t = 0; t < normalizedSkips.length; t++) {
+      if (candS.includes(normalizedSkips[t])) return null;
+    }
+  }
 
   var fieldTypes = Object.keys(FIELD_MAPPINGS);
 

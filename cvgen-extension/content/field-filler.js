@@ -142,12 +142,33 @@ function getRadioLabel(radioEl) {
 // ─── Remplissage des champs ───────────────────────────────────────────────────
 
 /**
+ * Dispatch la séquence d'événements attendue par la plupart des frameworks
+ * et ATS (React, Vue, Angular, Taleo, SuccessFactors). Taleo et SAP écoutent
+ * keydown/keyup/focusout en plus des input/change classiques.
+ */
+function dispatchFieldEvents(element) {
+  try {
+    element.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+    element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Tab" }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    element.dispatchEvent(new Event("blur", { bubbles: true }));
+    element.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  } catch (_) {
+    // Fallback minimal si les constructeurs ne sont pas dispo
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+/**
  * Remplit un <input> en simulant une saisie native.
  * Utilise le setter du prototype pour notifier React/Vue/Angular.
  */
 function fillInputField(element, value) {
   try {
     element.focus();
+    element.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 
     var descriptor = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -159,12 +180,11 @@ function fillInputField(element, value) {
       element.value = value;
     }
 
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
+    dispatchFieldEvents(element);
     element.blur();
   } catch (err) {
-    // Fallback simple
     element.value = value;
+    element.dispatchEvent(new Event("input", { bubbles: true }));
     element.dispatchEvent(new Event("change", { bubbles: true }));
   }
 }
@@ -175,6 +195,7 @@ function fillInputField(element, value) {
 function fillTextareaField(element, value) {
   try {
     element.focus();
+    element.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 
     var descriptor = Object.getOwnPropertyDescriptor(
       window.HTMLTextAreaElement.prototype,
@@ -186,11 +207,11 @@ function fillTextareaField(element, value) {
       element.value = value;
     }
 
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
+    dispatchFieldEvents(element);
     element.blur();
   } catch (err) {
     element.value = value;
+    element.dispatchEvent(new Event("input", { bubbles: true }));
     element.dispatchEvent(new Event("change", { bubbles: true }));
   }
 }
@@ -242,14 +263,34 @@ function fillSelectField(selectElement, profileValue) {
 
   if (!match) return false;
 
-  // Simuler l'interaction complète pour React/Vue/Angular
-  selectElement.focus();
-  selectElement.value = match.value;
-  selectElement.dispatchEvent(new Event("focus", { bubbles: true }));
-  selectElement.dispatchEvent(new Event("mousedown", { bubbles: true }));
-  selectElement.dispatchEvent(new Event("input", { bubbles: true }));
-  selectElement.dispatchEvent(new Event("change", { bubbles: true }));
-  selectElement.dispatchEvent(new Event("blur", { bubbles: true }));
+  // Simuler l'interaction complète pour React/Vue/Angular/Taleo/SAP.
+  // Le setter natif force React à voir le changement de value.
+  try {
+    selectElement.focus();
+    selectElement.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    selectElement.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
+    var descriptor = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      "value",
+    );
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(selectElement, match.value);
+    } else {
+      selectElement.value = match.value;
+    }
+    // S'assurer que selectedIndex reflète aussi la sélection
+    match.selected = true;
+
+    selectElement.dispatchEvent(new Event("input", { bubbles: true }));
+    selectElement.dispatchEvent(new Event("change", { bubbles: true }));
+    selectElement.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Enter" }));
+    selectElement.dispatchEvent(new Event("blur", { bubbles: true }));
+    selectElement.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  } catch (_) {
+    selectElement.value = match.value;
+    selectElement.dispatchEvent(new Event("change", { bubbles: true }));
+  }
   return true;
 }
 

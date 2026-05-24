@@ -24,9 +24,11 @@ var DIALING_CODES = {
 };
 
 /**
- * Retourne l'indicatif téléphonique correspondant au pays du profil,
- * ou tente d'extraire un indicatif déjà présent dans le numéro de téléphone.
- * Fallback : "+33" (France).
+ * Retourne l'indicatif téléphonique (+XX) à partir du profil.
+ * Exposé sur window pour les cas où le champ est un input texte pur
+ * attendant explicitement un indicatif numérique (peu fréquent).
+ *
+ * @returns {string} Ex: "+33", "+212"
  */
 function getDialingCode(identite) {
   if (!identite) return "+33";
@@ -147,7 +149,10 @@ function getValueForField(fieldType, profil, coverLetter) {
     permis: profil.permis || identite.permis || "",
     autorisation_travail: profil.autorisationTravail ? "Oui" : "Non",
     source_candidature: "",
-    indicatif_telephone: getDialingCode(identite),
+    // Indicatif téléphonique : on renvoie le NOM DU PAYS.
+    // fillSelectField gère les alias (France ↔ "France (+33)" ↔ "FR" ↔ "+33").
+    // Pour un input texte pur, getDialingCode() est exposé sur window.
+    indicatif_telephone: identite.pays || "France",
   };
 
   var value = map[fieldType];
