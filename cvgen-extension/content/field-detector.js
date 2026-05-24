@@ -27,10 +27,14 @@ function normalize(str) {
 
 // ─── Dictionnaire de mappings FR + EN ────────────────────────────────────────
 
-// Patterns qui doivent IGNORER le champ (jamais matché à un type CVGen).
-// Vérifiés en priorité absolue pour éviter les faux positifs type "deuxième
-// prénom" matché à "prénom", ou "préférence" matché à "prénom".
+// Patterns qui doivent IGNORER le champ (jamais matché à un type CVGen
+// par le scan principal). Vérifiés en priorité absolue pour éviter :
+//   - les faux positifs substring : "deuxième prénom" → matché à "prénom",
+//     "nom de la société" → matché à "nom" (= last name)
+//   - les champs des sections dynamiques (exp/formation) qui sont remplis
+//     séparément par fillSubfields() avec un dictionnaire dédié.
 var SKIP_PATTERNS = [
+  // Identité — faux positifs classiques
   "deuxieme prenom",
   "deuxième prénom",
   "middle name",
@@ -40,6 +44,26 @@ var SKIP_PATTERNS = [
   "prefere",
   "préféré",
   "preferences",
+  // Sous-champs Expérience (gérés par fillExperienceSections + EXPERIENCE_SUBFIELDS)
+  "nom de la societe",
+  "nom de la société",
+  "nom de l entreprise",
+  "nom de l'entreprise",
+  "nom de la fonction",
+  "company name",
+  "employer name",
+  "organization name",
+  // Sous-champs Formation (gérés par fillFormationSections + FORMATION_SUBFIELDS)
+  "nom de la formation",
+  "nom de l ecole",
+  "nom de l'école",
+  "nom de l universite",
+  "nom de l'université",
+  "nom du diplome",
+  "nom du diplôme",
+  "school name",
+  "university name",
+  "degree name",
 ];
 
 var FIELD_MAPPINGS = {

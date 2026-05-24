@@ -569,34 +569,29 @@ async function fillExperienceSections(profil) {
   var experiences = profil.experiences || [];
   if (experiences.length === 0) return 0;
 
+  // Sanity check : ne jamais créer plus de 10 entrées (anti-boucle si données corrompues)
+  if (experiences.length > 10) {
+    Logger.warn("Profil contient " + experiences.length + " expériences, plafonné à 10");
+    experiences = experiences.slice(0, 10);
+  }
+
   // 1. Ouvrir l'accordéon si nécessaire (SuccessFactors, etc.)
   var sectionEl = await expandSection("experience");
-  // Fallback : chercher le heading classique
   if (!sectionEl) sectionEl = findSection("experience");
   if (!sectionEl) {
     Logger.log("Section expérience non trouvée sur cette page");
     return 0;
   }
 
-  var added = 0;
+  // 2. Compter les containers d'entrées DÉJÀ présents pour cette section
+  //    afin de ne pas en recréer si l'utilisateur a déjà cliqué Remplir.
+  var existingContainers = findAllDynamicContainers(sectionEl);
+  Logger.log(
+    "Section expérience : " + existingContainers.length +
+    " entrée(s) existante(s), profil = " + experiences.length + " exp."
+  );
 
-  // Vérifier s'il y a déjà un formulaire vide existant (SF pré-crée souvent une entrée)
-  var existingContainer = findLatestDynamicForm(sectionEl);
-  var hasExistingEmpty = false;
-  if (existingContainer) {
-    var existingInputs = Array.from(
-      existingContainer.querySelectorAll('input:not([type="hidden"]), textarea, select')
-    ).filter(function (el) { return !shouldIgnore(el); });
-    var emptyCount = existingInputs.filter(function (el) {
-      if (el.tagName === "SELECT") {
-        var opt = el.options && el.options[el.selectedIndex];
-        var txt = opt ? (opt.text || "").toLowerCase() : "";
-        return !el.value || txt.includes("aucune") || txt.includes("select");
-      }
-      return !el.value || el.value.trim() === "";
-    }).length;
-    hasExistingEmpty = emptyCount >= 2; // Au moins 2 champs vides → formulaire vide
-  }
+  var added = 0;
 
   for (var i = 0; i < experiences.length; i++) {
     var exp = experiences[i];
@@ -604,30 +599,32 @@ async function fillExperienceSections(profil) {
 
     var container;
 
-    if (i === 0 && hasExistingEmpty && existingContainer) {
-      // Première expérience : remplir le formulaire déjà visible
-      container = existingContainer;
-      Logger.log("Formulaire expérience existant trouvé, remplissage direct");
+    if (i < existingContainers.length) {
+      // Réutiliser une entrée déjà présente (vide ou pré-remplie d'un essai précédent)
+      container = existingContainers[i];
+      Logger.log("Expérience #" + (i + 1) + " : réutilisation entrée existante");
     } else {
+      // Cliquer Ajouter pour créer une nouvelle entrée
       var addBtn = findAddButton(sectionEl);
       if (!addBtn) {
         Logger.warn("Bouton Ajouter (expérience) non trouvé");
         break;
       }
 
-      // Clic robuste pour SF (juic.fire, etc.)
-      Logger.debug("Clic sur Ajouter (exp): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
+      var beforeCount = findAllDynamicContainers(sectionEl).length;
+      Logger.debug("Clic Ajouter exp (#" + (i + 1) + "): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
       addBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
       addBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
       addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       addBtn.click();
       await waitForNewFields(2500);
 
-      container = findLatestDynamicForm(sectionEl);
-      if (!container) {
-        Logger.warn("Container du formulaire expérience non trouvé");
-        continue;
+      var afterContainers = findAllDynamicContainers(sectionEl);
+      if (afterContainers.length <= beforeCount) {
+        Logger.warn("Clic Ajouter n'a créé aucune nouvelle entrée — arrêt");
+        break;
       }
+      container = afterContainers[afterContainers.length - 1];
     }
 
     var values = {
@@ -641,12 +638,37 @@ async function fillExperienceSections(profil) {
     };
 
     var filled = await fillSubfields(container, EXPERIENCE_SUBFIELDS, values);
-    Logger.log("Expérience : " + filled + " champ(s) rempli(s)");
+    Logger.log("Expérience #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
     added++;
   }
 
-  Logger.log(added + " expérience(s) ajoutée(s)");
+  Logger.log(added + " expérience(s) traitée(s)");
   return added;
+}
+
+/**
+ * Retourne TOUS les containers d'entrées (records) déjà présents dans une section
+ * dynamique (utile pour ne pas en recréer si l'utilisateur a cliqué Remplir 2 fois).
+ *
+ * @param {Element} sectionEl
+ * @returns {Element[]}
+ */
+function findAllDynamicContainers(sectionEl) {
+  var container =
+    sectionEl.closest('section, fieldset, [class*="section"], details') ||
+    sectionEl.parentElement;
+  if (!container) return [];
+
+  var found = Array.from(
+    container.querySelectorAll(
+      'fieldset, [class*="entry"], [class*="record"], [class*="item-row"], ' +
+      'li[class*="item"], div[data-automation-id*="formField"]'
+    )
+  ).filter(function (el) {
+    // Doit contenir au moins 1 input visible
+    return el.querySelector('input:not([type="hidden"]), textarea, select') !== null;
+  });
+  return found;
 }
 
 /**
@@ -659,6 +681,12 @@ async function fillFormationSections(profil) {
   var formations = profil.formations || [];
   if (formations.length === 0) return 0;
 
+  // Sanity check anti-boucle
+  if (formations.length > 10) {
+    Logger.warn("Profil contient " + formations.length + " formations, plafonné à 10");
+    formations = formations.slice(0, 10);
+  }
+
   // 1. Ouvrir les deux accordéons (parcours académique + formations et certifications)
   var sectionEl = await expandSection("formation");
   if (!sectionEl) sectionEl = findSection("formation");
@@ -667,28 +695,46 @@ async function fillFormationSections(profil) {
     return 0;
   }
 
+  // Compter les entrées formation déjà présentes pour ne pas en recréer
+  var existingFormContainers = findAllDynamicContainers(sectionEl);
+  Logger.log(
+    "Section formation : " + existingFormContainers.length +
+    " entrée(s) existante(s), profil = " + formations.length + " formation(s)."
+  );
+
   var added = 0;
 
   for (var i = 0; i < formations.length; i++) {
     var form = formations[i];
     if (!form.diplome && !form.etablissement && !form.niveauEtudes && !form.mention) continue;
 
-    var addBtn = findAddButton(sectionEl);
-    if (!addBtn) {
-      Logger.warn("Bouton Ajouter (formation) non trouvé");
-      break;
+    var container;
+
+    if (i < existingFormContainers.length) {
+      container = existingFormContainers[i];
+      Logger.log("Formation #" + (i + 1) + " : réutilisation entrée existante");
+    } else {
+      var addBtn = findAddButton(sectionEl);
+      if (!addBtn) {
+        Logger.warn("Bouton Ajouter (formation) non trouvé");
+        break;
+      }
+
+      var beforeCount = findAllDynamicContainers(sectionEl).length;
+      Logger.debug("Clic Ajouter formation (#" + (i + 1) + "): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
+      addBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      addBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      addBtn.click();
+      await waitForNewFields(2500);
+
+      var afterContainers = findAllDynamicContainers(sectionEl);
+      if (afterContainers.length <= beforeCount) {
+        Logger.warn("Clic Ajouter formation n'a créé aucune nouvelle entrée — arrêt");
+        break;
+      }
+      container = afterContainers[afterContainers.length - 1];
     }
-
-    // Clic robuste pour SF (juic.fire, etc.)
-    Logger.debug("Clic sur Ajouter (formation): " + (addBtn.title || addBtn.innerText || "").substring(0, 40));
-    addBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    addBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-    addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    addBtn.click();
-    await waitForNewFields(2500);
-
-    var container = findLatestDynamicForm(sectionEl);
-    if (!container) continue;
 
     var values = {
       nom_formation: form.diplome || form.niveauEtudes || "",
@@ -700,11 +746,12 @@ async function fillFormationSections(profil) {
       country_education: "France",
     };
 
-    await fillSubfields(container, FORMATION_SUBFIELDS, values);
+    var filled = await fillSubfields(container, FORMATION_SUBFIELDS, values);
+    Logger.log("Formation #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
     added++;
   }
 
-  Logger.log(added + " formation(s) ajoutée(s)");
+  Logger.log(added + " formation(s) traitée(s)");
   return added;
 }
 
