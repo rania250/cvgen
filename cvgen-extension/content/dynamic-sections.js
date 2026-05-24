@@ -435,40 +435,57 @@ function resolveClickable(el) {
  */
 function clickElementRobust(el) {
   if (!el) return;
+
+  // Log de diagnostic : structure interne du wrapper pour comprendre
+  // ce qu'il contient vraiment.
+  var innerHTMLShort = (el.innerHTML || "").replace(/\s+/g, " ").substring(0, 250);
+  Logger.log("Structure du bouton : " + innerHTMLShort);
+
   var target = resolveClickable(el);
   if (target !== el) {
-    Logger.debug(
+    Logger.log(
       "Clic redirigé du wrapper <" + el.tagName.toLowerCase() +
-      "> vers enfant cliquable <" + target.tagName.toLowerCase() + ">"
+      "> vers enfant cliquable <" + target.tagName.toLowerCase() +
+      " class='" + (target.className || "").substring(0, 40) + "'>"
     );
+  } else {
+    Logger.log("Pas d'enfant interactif trouvé — clic direct sur le wrapper");
   }
 
-  try {
-    target.focus();
-    var commonOpts = { bubbles: true, cancelable: true, view: window };
-    try {
-      target.dispatchEvent(new PointerEvent("pointerover", commonOpts));
-      target.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
-      target.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
-    } catch (_) { /* PointerEvent peut ne pas être dispo */ }
-    target.dispatchEvent(new MouseEvent("mouseover", commonOpts));
-    target.dispatchEvent(new MouseEvent("mousedown", commonOpts));
-    target.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
-    target.dispatchEvent(new MouseEvent("click",     commonOpts));
-    if (typeof target.click === "function") target.click();
-    try {
-      target.dispatchEvent(new Event("touchstart", { bubbles: true }));
-      target.dispatchEvent(new Event("touchend",   { bubbles: true }));
-    } catch (_) {}
+  // ── Stratégie agressive : cliquer le wrapper, l'enfant cliquable,
+  //    ET TOUS les enfants potentiellement interactifs.
+  var clickTargets = [el];
+  if (target !== el) clickTargets.push(target);
 
-    // Filet de sécurité : si le target ≠ el initial, cliquer aussi le wrapper
-    // (certains ATS attachent le handler au div parent, d'autres à l'enfant)
-    if (target !== el && typeof el.click === "function") {
-      el.click();
+  // Ajouter tous les <a>, <button>, [onclick], [role=button] descendants
+  var allChildren = el.querySelectorAll('a, button, input[type="button"], [onclick], [role="button"]');
+  for (var c = 0; c < allChildren.length; c++) {
+    if (clickTargets.indexOf(allChildren[c]) === -1) clickTargets.push(allChildren[c]);
+  }
+  Logger.log("Cibles de clic : " + clickTargets.length + " élément(s)");
+
+  for (var k = 0; k < clickTargets.length; k++) {
+    var t = clickTargets[k];
+    try {
+      t.focus();
+      var commonOpts = { bubbles: true, cancelable: true, view: window };
+      try {
+        t.dispatchEvent(new PointerEvent("pointerover", commonOpts));
+        t.dispatchEvent(new PointerEvent("pointerdown", commonOpts));
+        t.dispatchEvent(new PointerEvent("pointerup",   commonOpts));
+      } catch (_) { /* PointerEvent peut ne pas être dispo */ }
+      t.dispatchEvent(new MouseEvent("mouseover", commonOpts));
+      t.dispatchEvent(new MouseEvent("mousedown", commonOpts));
+      t.dispatchEvent(new MouseEvent("mouseup",   commonOpts));
+      t.dispatchEvent(new MouseEvent("click",     commonOpts));
+      if (typeof t.click === "function") t.click();
+      try {
+        t.dispatchEvent(new Event("touchstart", { bubbles: true }));
+        t.dispatchEvent(new Event("touchend",   { bubbles: true }));
+      } catch (_) {}
+    } catch (err) {
+      Logger.warn("Clic cible #" + k + " échoué : " + err.message);
     }
-  } catch (err) {
-    Logger.warn("clickElementRobust a échoué : " + err.message);
-    try { target.click(); } catch (_) {}
   }
 }
 
@@ -677,6 +694,7 @@ async function fillExperienceSections(profil) {
       }
 
       var beforeCount = findAllDynamicContainers(sectionEl).length;
+      var beforeInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
       Logger.log(
         "Clic Ajouter exp #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'> texte='" +
@@ -686,14 +704,35 @@ async function fillExperienceSections(profil) {
       await waitForNewFields(3500); // SF est lent
 
       var afterContainers = findAllDynamicContainers(sectionEl);
+      var afterInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
+      Logger.log(
+        "Après clic : " + afterContainers.length + " containers (avant " + beforeCount +
+        "), " + afterInputs + " inputs (avant " + beforeInputs + ")"
+      );
+
       if (afterContainers.length <= beforeCount) {
-        Logger.warn(
-          "Clic Ajouter n'a créé aucune nouvelle entrée — arrêt (avant=" +
-          beforeCount + ", après=" + afterContainers.length + ")"
-        );
-        break;
+        if (afterInputs > beforeInputs) {
+          // Des inputs sont apparus mais hors de notre scope de containers
+          // → on cherche le dernier container ayant un input nouvellement créé
+          Logger.warn(
+            "Nouveaux inputs créés (" + (afterInputs - beforeInputs) +
+            ") mais hors du scope habituel — tentative de fallback global"
+          );
+          container = findGlobalNewContainer();
+          if (!container) {
+            Logger.warn("Pas de container fallback trouvé — arrêt");
+            break;
+          }
+        } else {
+          Logger.warn(
+            "Clic Ajouter n'a créé aucune nouvelle entrée — arrêt (avant=" +
+            beforeCount + ", après=" + afterContainers.length + ")"
+          );
+          break;
+        }
+      } else {
+        container = afterContainers[afterContainers.length - 1];
       }
-      container = afterContainers[afterContainers.length - 1];
     }
 
     var values = {
@@ -713,6 +752,37 @@ async function fillExperienceSections(profil) {
 
   Logger.log(added + " expérience(s) traitée(s)");
   return added;
+}
+
+/**
+ * Cherche dans toute la page un container "fraîchement créé" qui contient des
+ * inputs vides — utile quand un clic Ajouter crée des champs hors du scope
+ * habituel de la section (ex: SuccessFactors qui injecte en bas du formulaire).
+ *
+ * @returns {Element|null}
+ */
+function findGlobalNewContainer() {
+  // Containers candidats à l'échelle de la page entière
+  var candidates = Array.from(
+    document.querySelectorAll(
+      'fieldset, [class*="entry"], [class*="record"], [class*="rcm"][class*="item"], ' +
+      '[class*="ftl-record"], [class*="formItem"], [class*="form-item"], ' +
+      'div[data-automation-id*="formField"]'
+    )
+  ).filter(function (el) {
+    var inputs = el.querySelectorAll('input:not([type="hidden"]), textarea, select');
+    if (inputs.length === 0) return false;
+    // Au moins 1 input vide → container "frais"
+    var empties = 0;
+    for (var i = 0; i < inputs.length; i++) {
+      if (!inputs[i].value || inputs[i].value.trim() === "") empties++;
+    }
+    return empties >= Math.min(2, inputs.length);
+  });
+
+  if (candidates.length === 0) return null;
+  // Retourner le DERNIER (le plus récemment ajouté en bas du DOM)
+  return candidates[candidates.length - 1];
 }
 
 /**
@@ -831,6 +901,7 @@ async function fillFormationSections(profil) {
       }
 
       var beforeCount = findAllDynamicContainers(sectionEl).length;
+      var beforeInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
       Logger.log(
         "Clic Ajouter formation #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
         " class='" + (addBtn.className || "").substring(0, 60) + "'> texte='" +
@@ -840,14 +911,33 @@ async function fillFormationSections(profil) {
       await waitForNewFields(3500);
 
       var afterContainers = findAllDynamicContainers(sectionEl);
+      var afterInputs = document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
+      Logger.log(
+        "Après clic : " + afterContainers.length + " containers (avant " + beforeCount +
+        "), " + afterInputs + " inputs (avant " + beforeInputs + ")"
+      );
+
       if (afterContainers.length <= beforeCount) {
-        Logger.warn(
-          "Clic Ajouter formation n'a créé aucune nouvelle entrée — arrêt (avant=" +
-          beforeCount + ", après=" + afterContainers.length + ")"
-        );
-        break;
+        if (afterInputs > beforeInputs) {
+          Logger.warn(
+            "Nouveaux inputs créés (" + (afterInputs - beforeInputs) +
+            ") mais hors du scope habituel — fallback global"
+          );
+          container = findGlobalNewContainer();
+          if (!container) {
+            Logger.warn("Pas de container fallback trouvé — arrêt");
+            break;
+          }
+        } else {
+          Logger.warn(
+            "Clic Ajouter formation n'a créé aucune nouvelle entrée — arrêt (avant=" +
+            beforeCount + ", après=" + afterContainers.length + ")"
+          );
+          break;
+        }
+      } else {
+        container = afterContainers[afterContainers.length - 1];
       }
-      container = afterContainers[afterContainers.length - 1];
     }
 
     var values = {
