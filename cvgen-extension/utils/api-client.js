@@ -5,10 +5,10 @@
  */
 
 // Valeur par défaut utilisée si aucune URL n'est encore stockée.
-// Modifiable à tout moment via la page Options (chrome.storage.local → apiBaseUrl).
-// Pour pointer vers un backend local pendant le dev :
-//   ouvrir la page Options et saisir http://localhost:8080
-var API_BASE_URL = "https://api.cvgen.fr";
+// Pointée sur le backend de dev local (Docker / Spring Boot port 8080).
+// Modifiable à tout moment via la page Options (chrome.storage.local → apiBaseUrl)
+// pour pointer vers une URL prod ex: https://api.cvgen.fr
+var API_BASE_URL = "http://localhost:8080";
 
 /**
  * Effectue un appel à l'API CVGen avec le token JWT Bearer.

@@ -4,7 +4,7 @@
 
 "use strict";
 
-const DEFAULT_API_URL = "https://api.cvgen.fr";
+const DEFAULT_API_URL = "http://localhost:8080";
 
 document.addEventListener("DOMContentLoaded", async function () {
   await loadSettings();

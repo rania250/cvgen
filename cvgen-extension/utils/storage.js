@@ -103,7 +103,7 @@ var Storage = {
    */
   async getApiBaseUrl() {
     const url = await this.get("apiBaseUrl");
-    return url || "https://api.cvgen.fr";
+    return url || "http://localhost:8080";
   },
 
   async setApiBaseUrl(url) {
