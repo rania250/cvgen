@@ -921,6 +921,16 @@ async function fillSFCombobox(input, value) {
   var inputId = input.getAttribute("id");
   if (!inputId) return false;
 
+  // STRATÉGIE 0 (la plus rapide) : injection directe valeur + déclenchement onblur
+  // SF a typiquement onblur="juic.fire('X:','_onBlur',event)" qui valide la
+  // valeur saisie si elle correspond à une option connue. Pas besoin d'ouvrir
+  // le menu — ça contourne le problème isTrusted.
+  var directOk = await trySetSFComboboxDirect(input, value);
+  if (directOk) {
+    Logger.log("fillSFCombobox: valeur acceptée via injection directe pour " + inputId);
+    return true;
+  }
+
   if (SF_COMBOBOX_DISABLED) {
     return false;
   }
@@ -988,6 +998,77 @@ async function fillSFCombobox(input, value) {
 
   await new Promise(function (r) { setTimeout(r, 150); });
   return true;
+}
+
+/**
+ * Tente de remplir un combobox SF en :
+ *  1. Setting input.value directement via le setter natif (depuis main world)
+ *  2. Dispatchant input/change events
+ *  3. Déclenchant onblur (qui appelle juic.fire('_onBlur') côté SF)
+ *  4. Vérifiant si SF a accepté la valeur (input.value reste = value
+ *     OU title de l'input mis à jour OU aria-invalid disparaît)
+ *
+ * Cette approche contourne le problème isTrusted car SF valide la valeur
+ * saisie sans avoir besoin d'ouvrir le menu déroulant.
+ *
+ * @param {Element} input
+ * @param {string} value
+ * @returns {Promise<boolean>}
+ */
+async function trySetSFComboboxDirect(input, value) {
+  var inputId = input.getAttribute("id");
+  if (!inputId) return false;
+
+  var litVal = jsStringLit(value);
+  var litId = jsStringLit(inputId);
+
+  // Exécuter dans le main world : on a accès au setter natif ET aux handlers juic
+  execInMainWorld(
+    "(function(){try{" +
+      "var i=document.getElementById(" + litId + ");" +
+      "if(!i)return;" +
+      "i.focus();" +
+      // Utiliser le setter natif pour bypasser tout setter React-like
+      "var d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');" +
+      "if(d&&d.set){d.set.call(i," + litVal + ");}else{i.value=" + litVal + ";}" +
+      // Mettre aussi title (SF affiche souvent title comme placeholder/valeur)
+      "i.setAttribute('title'," + litVal + ");" +
+      // Events de saisie standard
+      "i.dispatchEvent(new Event('input',{bubbles:true,cancelable:true}));" +
+      "i.dispatchEvent(new Event('change',{bubbles:true,cancelable:true}));" +
+      // Déclencher onblur : SF a typiquement onblur='juic.fire(\"X:\",\"_onBlur\",event)'
+      "var ob=i.getAttribute('onblur');" +
+      "if(ob){try{(function(event){eval(ob);})(new FocusEvent('blur',{bubbles:true,relatedTarget:document.body}));}catch(_){}}" +
+      "i.dispatchEvent(new FocusEvent('blur',{bubbles:true,cancelable:true,relatedTarget:document.body}));" +
+      "i.dispatchEvent(new Event('focusout',{bubbles:true,cancelable:true}));" +
+      // Retirer le focus
+      "if(document.activeElement===i){i.blur();}" +
+    "}catch(e){console.warn('[CVGen MAIN] direct set combobox failed',e);}}())"
+  );
+
+  // Attendre un peu que SF traite le _onBlur (souvent un appel async pour valider)
+  await new Promise(function (r) { setTimeout(r, 350); });
+
+  // Vérifier si la valeur a été acceptée par SF
+  var currentValue = (input.value || "").trim();
+  var currentTitle = (input.getAttribute("title") || "").trim();
+  var ariaInvalid = input.getAttribute("aria-invalid");
+  var placeholder = (input.getAttribute("placeholder") || "").trim();
+  var normVal = normalize(value);
+
+  // Acceptée si :
+  //  - la valeur reste dans l'input (SF ne l'a pas revertée à "Aucune sélection")
+  //  - et aria-invalid n'est pas "true"
+  var valueKept =
+    normalize(currentValue) === normVal ||
+    normalize(currentValue).indexOf(normVal) !== -1 ||
+    normalize(currentTitle) === normVal ||
+    normalize(currentTitle).indexOf(normVal) !== -1;
+
+  var notInvalid = ariaInvalid !== "true";
+  var notReverted = currentValue !== "" && currentValue !== placeholder;
+
+  return valueKept && notInvalid && notReverted;
 }
 
 /**
