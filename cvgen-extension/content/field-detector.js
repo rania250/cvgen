@@ -455,6 +455,25 @@ var FIELD_MAPPINGS = {
     "github url",
   ],
 
+  facebook: [
+    "facebook",
+    "profil facebook",
+    "url facebook",
+    "fb",
+    "facebook url",
+  ],
+
+  twitter: [
+    "twitter",
+    "x ancien twitter",
+    "ancien twitter",
+    "profil twitter",
+    "profil x",
+    "url twitter",
+    "twitter url",
+    "x url",
+  ],
+
   // ── ÉGALITÉ & DIVERSITÉ ────────────────────────────────────────────────────
 
   genre: [
@@ -683,6 +702,20 @@ function shouldIgnore(element) {
  * @param {HTMLElement} element
  * @returns {string|null}
  */
+/**
+ * Remonte d'un cran dans l'arbre composé : parentElement ou shadow host.
+ * Indispensable pour les Web Components (SmartRecruiters, Workday, etc.)
+ * où l'<input> est dans un shadow root et le label sur un ancêtre du
+ * light DOM (typiquement un <spl-form-field>).
+ */
+function getComposedParent_FD(el) {
+  if (!el) return null;
+  if (el.parentElement) return el.parentElement;
+  var root = el.getRootNode && el.getRootNode();
+  if (root && root.host) return root.host;
+  return null;
+}
+
 function detectFieldType(element) {
   var candidates = [];
 
@@ -692,6 +725,7 @@ function detectFieldType(element) {
   candidates.push(element.getAttribute("placeholder") || "");
   candidates.push(element.getAttribute("autocomplete") || "");
   candidates.push(element.getAttribute("aria-label") || "");
+  candidates.push(element.getAttribute("aria-labelledby") || "");
   candidates.push(element.getAttribute("data-label") || "");
   candidates.push(element.getAttribute("data-field") || "");
   candidates.push(element.getAttribute("data-testid") || "");
@@ -699,6 +733,7 @@ function detectFieldType(element) {
   candidates.push(element.getAttribute("data-field-name") || "");
   candidates.push(element.getAttribute("data-uxi-widget-id") || "");
   candidates.push(element.getAttribute("data-qa") || "");
+  candidates.push(element.getAttribute("title") || "");
 
   // 2. Label associé via for/id
   var id = element.getAttribute("id");
@@ -707,6 +742,18 @@ function detectFieldType(element) {
       var label = document.querySelector('label[for="' + CSS.escape(id) + '"]');
       if (label) candidates.push(label.innerText || label.textContent || "");
     } catch (_) {}
+  }
+
+  // 2b. aria-labelledby (peut référencer un élément light DOM hors shadow)
+  var labelledBy = element.getAttribute("aria-labelledby");
+  if (labelledBy) {
+    var refIds = labelledBy.split(/\s+/);
+    for (var li = 0; li < refIds.length; li++) {
+      try {
+        var refEl = document.getElementById(refIds[li]);
+        if (refEl) candidates.push(refEl.innerText || refEl.textContent || "");
+      } catch (_) {}
+    }
   }
 
   // 3. Label parent direct (<label><input>...</label>)
@@ -729,6 +776,32 @@ function detectFieldType(element) {
     candidates.push(
       (clone2.innerText || clone2.textContent || "").split("\n")[0],
     );
+  }
+
+  // 4b. Remontée dans l'arbre COMPOSÉ (traverse les shadow roots) pour les
+  // Web Components type <spl-input>/<spl-form-field> : le label est porté
+  // par un ancêtre dans le light DOM, inaccessible via closest/parentElement.
+  var composed = getComposedParent_FD(element);
+  var hops = 0;
+  while (composed && hops < 8) {
+    var tag = composed.tagName ? composed.tagName.toLowerCase() : "";
+    var clsStr = composed.className ? composed.className.toString() : "";
+    var isLabelHost =
+      tag.indexOf("form-field") > -1 ||
+      tag.indexOf("typography") > -1 ||
+      tag === "spl-input" || tag === "spl-textarea" || tag === "spl-select" ||
+      clsStr.indexOf("form-field") > -1;
+    if (isLabelHost) {
+      var rawTxt = (composed.innerText || composed.textContent || "")
+        .split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+      if (rawTxt.length > 0) {
+        candidates.push(rawTxt[0]);
+        candidates.push(rawTxt.slice(0, 2).join(" "));
+      }
+      break;
+    }
+    composed = getComposedParent_FD(composed);
+    hops++;
   }
 
   // 5. Texte du grand-parent — première ligne seulement (Indeed FR, WTTJ)
