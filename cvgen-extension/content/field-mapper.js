@@ -80,6 +80,8 @@ function getValueForField(fieldType, profil, coverLetter) {
     linkedin: identite.linkedin || "",
     portfolio: identite.portfolio || "",
     github: identite.github || "",
+    facebook: identite.facebook || "",
+    twitter: identite.twitter || "",
     titre_poste: profil.titrePoste || "",
     resume_professionnel: profil.resumeProfessionnel || "",
     annees_experience: profil.anneesExperience || "",
