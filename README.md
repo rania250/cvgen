@@ -4,10 +4,10 @@
 
 ## Composants du projet
 
-| Composant | Description |
-| --------- | ----------- |
-| `cvgen-backend` | API REST Spring Boot — gestion des profils, auth JWT, génération de CV, scoring ATS |
-| `cvgen-frontend` | Application web React — interface utilisateur pour créer et gérer son profil/CV |
+| Composant         | Description                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| `cvgen-backend`   | API REST Spring Boot — gestion des profils, auth JWT, génération de CV, scoring ATS     |
+| `cvgen-frontend`  | Application web React — interface utilisateur pour créer et gérer son profil/CV         |
 | `cvgen-extension` | Extension Chrome MV3 — autofill des formulaires de candidature à partir du profil CVGen |
 
 ## Stack technique
@@ -44,6 +44,7 @@ docker compose up -d
 ```
 
 Cela démarre :
+
 - `cvgen-postgres` sur `localhost:5432`
 - `cvgen-backend` sur `localhost:8080` (build automatique du JAR)
 
@@ -65,14 +66,14 @@ npm run dev
 
 ## URLs utiles
 
-| Service              | URL                                         |
-| -------------------- | ------------------------------------------- |
-| API Backend          | http://localhost:8080                       |
-| Swagger UI           | http://localhost:8080/swagger-ui.html       |
-| OpenAPI JSON         | http://localhost:8080/v3/api-docs           |
-| Health Actuator      | http://localhost:8080/actuator/health       |
-| Frontend (Vite)      | http://localhost:5173                       |
-| PostgreSQL           | `postgres://cvgen_user:cvgen_password@localhost:5432/cvgen` |
+| Service         | URL                                                         |
+| --------------- | ----------------------------------------------------------- |
+| API Backend     | http://localhost:8080                                       |
+| Swagger UI      | http://localhost:8080/swagger-ui.html                       |
+| OpenAPI JSON    | http://localhost:8080/v3/api-docs                           |
+| Health Actuator | http://localhost:8080/actuator/health                       |
+| Frontend (Vite) | http://localhost:5173                                       |
+| PostgreSQL      | `postgres://cvgen_user:cvgen_password@localhost:5432/cvgen` |
 
 ## Structure du projet
 
@@ -152,20 +153,20 @@ L'extension se connecte à votre compte CVGen pour récupérer votre profil, pui
 
 ### Sites supportés
 
-| ATS / Jobboard | Support |
-| -------------- | ------- |
-| SAP SuccessFactors | ✅ Complet (dropdowns custom inclus) |
-| LinkedIn | ✅ |
-| Indeed | ✅ |
-| Welcome to the Jungle | ✅ |
-| France Travail | ✅ |
-| Greenhouse | ✅ |
-| Lever | ✅ |
-| Workday / MyWorkdayJobs | ✅ |
-| SmartRecruiters | ✅ |
-| iCIMS | ✅ |
-| Taleo | ✅ |
-| Jobvite | ✅ |
+| ATS / Jobboard          | Support                              |
+| ----------------------- | ------------------------------------ |
+| SAP SuccessFactors      | ✅ Complet (dropdowns custom inclus) |
+| LinkedIn                | ✅                                   |
+| Indeed                  | ✅                                   |
+| Welcome to the Jungle   | ✅                                   |
+| France Travail          | ✅                                   |
+| Greenhouse              | ✅                                   |
+| Lever                   | ✅                                   |
+| Workday / MyWorkdayJobs | ✅                                   |
+| SmartRecruiters         | ✅                                   |
+| iCIMS                   | ✅                                   |
+| Taleo                   | ✅                                   |
+| Jobvite                 | ✅                                   |
 
 ### Utilisation
 
@@ -195,19 +196,19 @@ L'extension se connecte à votre compte CVGen pour récupérer votre profil, pui
 
 ### Authentification
 
-| Méthode | Endpoint              | Description                              |
-| ------- | --------------------- | ---------------------------------------- |
-| POST    | `/api/auth/register`  | Création de compte                       |
-| POST    | `/api/auth/login`     | Connexion (retourne access + refresh)    |
-| POST    | `/api/auth/refresh`   | Renouvellement de l'access token         |
+| Méthode | Endpoint             | Description                           |
+| ------- | -------------------- | ------------------------------------- |
+| POST    | `/api/auth/register` | Création de compte                    |
+| POST    | `/api/auth/login`    | Connexion (retourne access + refresh) |
+| POST    | `/api/auth/refresh`  | Renouvellement de l'access token      |
 
 ### Profil
 
-| Méthode | Endpoint                  | Description                                          |
-| ------- | ------------------------- | ---------------------------------------------------- |
-| GET     | `/api/profile`            | Profil complet (format backend — champs anglais)     |
-| PUT     | `/api/profile`            | Mise à jour du profil                                |
-| GET     | `/api/profile/complet`    | Profil agrégé au format extension (champs français)  |
+| Méthode | Endpoint               | Description                                         |
+| ------- | ---------------------- | --------------------------------------------------- |
+| GET     | `/api/profile`         | Profil complet (format backend — champs anglais)    |
+| PUT     | `/api/profile`         | Mise à jour du profil                               |
+| GET     | `/api/profile/complet` | Profil agrégé au format extension (champs français) |
 
 Tous les endpoints (sauf auth) requièrent l'en-tête `Authorization: Bearer <accessToken>`.
 
@@ -224,6 +225,7 @@ cd cvgen-frontend && npm run lint && npm run type-check && npm run build
 ## CI
 
 Workflow GitHub Actions `CVGen CI` (`.github/workflows/ci.yml`) :
+
 - **`backend-ci`** : démarre Postgres en service container, lance `mvn verify`, upload du JAR
 - **`frontend-ci`** : `npm ci` → `lint` → `type-check` → `build`, upload du `dist/`
 
