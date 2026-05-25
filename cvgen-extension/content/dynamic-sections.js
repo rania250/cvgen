@@ -31,6 +31,33 @@ function querySelectorAllDeep(root, selector) {
   return results;
 }
 
+/**
+ * Remonte d'un cran dans l'arbre "composé" : parentElement OU host du
+ * shadow root si on est dans un shadow tree. Indispensable pour calculer
+ * le LCA quand les éléments sont répartis dans plusieurs shadow roots
+ * (cas SmartRecruiters où chaque <spl-input> a son propre shadow DOM).
+ */
+function getComposedParent(el) {
+  if (!el) return null;
+  if (el.parentElement) return el.parentElement;
+  var root = el.getRootNode && el.getRootNode();
+  if (root && root.host) return root.host;
+  return null;
+}
+
+/**
+ * Équivalent de Element.contains() qui traverse les shadow roots.
+ */
+function composedContains(ancestor, target) {
+  if (!ancestor || !target) return false;
+  var node = target;
+  while (node) {
+    if (node === ancestor) return true;
+    node = getComposedParent(node);
+  }
+  return false;
+}
+
 // ─── Détecteurs de sections ───────────────────────────────────────────────────
 
 var SECTION_PATTERNS = {
@@ -747,10 +774,21 @@ function clickElementRobust(el) {
   try {
     target.focus();
     if (isCustomEl && typeof target.click === "function") {
-      // .click() natif : équivalent d'un clic utilisateur, traverse le
-      // shadow DOM et déclenche les handlers internes du Web Component.
+      // .click() natif : équivalent d'un clic utilisateur, déclenche les
+      // handlers attachés sur l'élément (et bubble dans le light DOM).
       target.click();
       Logger.log("Stratégie A (Web Component) : .click() natif appelé sur <" + target.tagName.toLowerCase() + ">");
+
+      // Aussi cliquer le <button> interne du shadow DOM si présent.
+      // Certains Web Components Lit/Stencil n'écoutent que sur leur
+      // <button> interne (pas sur le wrapper).
+      if (target.shadowRoot) {
+        var innerBtn = target.shadowRoot.querySelector('button, [role="button"]');
+        if (innerBtn) {
+          try { innerBtn.click(); } catch (_) {}
+          Logger.log("Stratégie A bis : click sur <button> interne du shadow DOM");
+        }
+      }
     } else {
       target.dispatchEvent(new MouseEvent("click", {
         bubbles: true, cancelable: true, view: window,
@@ -1496,8 +1534,14 @@ async function fillExperienceSections(profil) {
       var afterCount = querySelectorAllDeep(
         document, 'input:not([type="hidden"]), textarea, select'
       ).length;
+      // Aussi compter les éventuels Web Components type input (SmartRecruiters)
+      var afterCustomCount = querySelectorAllDeep(
+        document, 'spl-input, spl-textarea, spl-select, spl-form-field, ' +
+        'spl-text-input, spl-datepicker, [class*="form-field"]'
+      ).length;
       Logger.log(
-        "Après clic exp : " + beforeSnapshot.size + " input(s) avant → " + afterCount + " après (deep)"
+        "Après clic exp : " + beforeSnapshot.size + " input(s) avant → " + afterCount +
+        " standards + " + afterCustomCount + " SPL custom"
       );
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
@@ -1610,30 +1654,52 @@ function findContainerOfNewEntry(beforeInputSet, beforeDeleteSet) {
   }
 
   // ── Stratégie 2 (fallback) : LCA des nouveaux inputs (deep — Shadow DOM) ──
+  // Utilise getComposedParent/composedContains pour traverser les shadow
+  // roots (chaque <spl-input> SmartRecruiters a son propre shadow root).
   var nowInputs = querySelectorAllDeep(
     document, 'input:not([type="hidden"]), textarea, select'
   );
   var newInputs = nowInputs.filter(function (el) { return !beforeInputSet.has(el); });
 
+  Logger.log(
+    "Stratégie 2 LCA : " + newInputs.length + " nouvel·s input(s) détecté(s) (deep)"
+  );
+
   if (newInputs.length === 0) return null;
 
+  // Construire la chaîne d'ancêtres composés du 1er nouvel input,
+  // en remontant à travers les shadow roots jusqu'à document.body.
   var firstChain = [];
   var node = newInputs[0];
-  while (node && node !== document.body) {
+  while (node && node !== document.body && node !== document.documentElement) {
     firstChain.push(node);
-    node = node.parentElement;
+    node = getComposedParent(node);
   }
+
   var lca = null;
   for (var i = 0; i < firstChain.length; i++) {
     var candidate = firstChain[i];
     var containsAll = true;
     for (var j = 1; j < newInputs.length; j++) {
-      if (!candidate.contains(newInputs[j])) {
+      if (!composedContains(candidate, newInputs[j])) {
         containsAll = false;
         break;
       }
     }
     if (containsAll) { lca = candidate; break; }
+  }
+
+  if (lca) {
+    var lcaInputs = querySelectorAllDeep(
+      lca, 'input:not([type="hidden"]), textarea, select'
+    ).length;
+    Logger.log(
+      "LCA trouvé : <" + lca.tagName.toLowerCase() +
+      " class='" + (lca.className || "").toString().substring(0, 60) +
+      "'> avec " + lcaInputs + " input(s) (deep)"
+    );
+  } else {
+    Logger.warn("Stratégie 2 LCA : aucun ancêtre commun trouvé pour les " + newInputs.length + " nouveaux inputs");
   }
   return lca;
 }
