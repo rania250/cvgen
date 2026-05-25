@@ -646,9 +646,24 @@ function resolveClickable(el) {
   if (el.hasAttribute("onclick")) return el;
   if (el.getAttribute("role") === "button") return el;
   if (el.getAttribute("tabindex") !== null) return el;
-  // Chercher le premier descendant interactif (5 niveaux max)
+  // Custom element (tagName avec tiret) — Web Component : on le considère
+  // interactif si son nom contient "button" (ex : <spl-button>, <my-button>).
+  // Le click sera fait via .click() natif qui bubble correctement.
+  if (el.tagName && el.tagName.indexOf("-") > -1 &&
+      el.tagName.toLowerCase().indexOf("button") > -1) {
+    return el;
+  }
+  // Chercher le premier descendant interactif (light DOM)
   var child = el.querySelector('a, button, input[type="button"], [onclick], [role="button"], [tabindex]');
-  return child || el;
+  if (child) return child;
+  // Sinon chercher dans le shadow DOM (Web Components Lit/Stencil/etc.)
+  if (el.shadowRoot) {
+    var shadowChild = el.shadowRoot.querySelector(
+      'a, button, input[type="button"], [onclick], [role="button"], [tabindex]'
+    );
+    if (shadowChild) return shadowChild;
+  }
+  return el;
 }
 
 /**
@@ -726,11 +741,21 @@ function clickElementRobust(el) {
   // On limite à un seul event "click" pour éviter de déclencher juic.fire
   // plusieurs fois (onkeydown, onkeyup et onclick appellent souvent la même
   // fonction → multiples Pointer/Mouse/Keyboard = multiples ajouts).
+  // Pour les Web Components (tag avec tiret), .click() natif bubble mieux
+  // que dispatchEvent et déclenche les handlers attachés sur le shadow DOM.
+  var isCustomEl = target.tagName && target.tagName.indexOf("-") > -1;
   try {
     target.focus();
-    target.dispatchEvent(new MouseEvent("click", {
-      bubbles: true, cancelable: true, view: window,
-    }));
+    if (isCustomEl && typeof target.click === "function") {
+      // .click() natif : équivalent d'un clic utilisateur, traverse le
+      // shadow DOM et déclenche les handlers internes du Web Component.
+      target.click();
+      Logger.log("Stratégie A (Web Component) : .click() natif appelé sur <" + target.tagName.toLowerCase() + ">");
+    } else {
+      target.dispatchEvent(new MouseEvent("click", {
+        bubbles: true, cancelable: true, view: window,
+      }));
+    }
   } catch (err) {
     Logger.warn("Stratégie A (click) a échoué : " + err.message);
   }
@@ -771,8 +796,9 @@ function waitForNewFields(timeoutMs, scope) {
   scope = scope || document.body;
 
   return new Promise(function (resolve) {
-    var initialCount = scope.querySelectorAll(
-      'input:not([type="hidden"]), textarea, select'
+    // Comptage deep (inclut les inputs dans les Shadow DOM, SmartRecruiters SPL)
+    var initialCount = querySelectorAllDeep(
+      scope, 'input:not([type="hidden"]), textarea, select'
     ).length;
 
     var resolved = false;
@@ -795,8 +821,8 @@ function waitForNewFields(timeoutMs, scope) {
     }
 
     var observer = new MutationObserver(function () {
-      var current = scope.querySelectorAll(
-        'input:not([type="hidden"]), textarea, select'
+      var current = querySelectorAllDeep(
+        scope, 'input:not([type="hidden"]), textarea, select'
       ).length;
       var dialog = document.querySelector('[role="dialog"]:not([aria-hidden="true"])');
       var hasNew =
@@ -822,8 +848,9 @@ function waitForNewFields(timeoutMs, scope) {
  * @param {Object} values    - Dictionnaire { key: valeur }
  */
 async function fillSubfields(container, subfields, values) {
-  var inputs = Array.from(
-    container.querySelectorAll('input:not([type="hidden"]), textarea, select'),
+  // Deep query : inclut les inputs dans les Shadow DOM (SmartRecruiters SPL)
+  var inputs = querySelectorAllDeep(
+    container, 'input:not([type="hidden"]), textarea, select'
   );
   var filled = 0;
   var DATE_KEYS = ["date_debut", "date_fin", "annee_obtention"];
@@ -1498,7 +1525,9 @@ async function fillExperienceSections(profil) {
  */
 function snapshotInputs() {
   var set = new Set();
-  var nodes = document.querySelectorAll('input:not([type="hidden"]), textarea, select');
+  var nodes = querySelectorAllDeep(
+    document, 'input:not([type="hidden"]), textarea, select'
+  );
   for (var i = 0; i < nodes.length; i++) set.add(nodes[i]);
   return set;
 }
@@ -1572,9 +1601,9 @@ function findContainerOfNewEntry(beforeInputSet, beforeDeleteSet) {
     }
   }
 
-  // ── Stratégie 2 (fallback) : LCA des nouveaux inputs ──
-  var nowInputs = Array.from(
-    document.querySelectorAll('input:not([type="hidden"]), textarea, select')
+  // ── Stratégie 2 (fallback) : LCA des nouveaux inputs (deep — Shadow DOM) ──
+  var nowInputs = querySelectorAllDeep(
+    document, 'input:not([type="hidden"]), textarea, select'
   );
   var newInputs = nowInputs.filter(function (el) { return !beforeInputSet.has(el); });
 
