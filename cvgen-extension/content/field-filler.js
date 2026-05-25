@@ -589,6 +589,32 @@ async function typeIntoField(element, text) {
  * - placeholder AAAA    → année seule
  * - autres              → JJ/MM/AAAA caractère par caractère
  */
+/**
+ * Retourne le type du <spl-date-field> / <spl-date-picker> ancêtre composé
+ * (utilisé par SmartRecruiters). Possibilités : "month-year", "year", "date".
+ * Retourne null si l'input n'est pas dans un date-picker SPL.
+ */
+function getSplDatePickerType(element) {
+  if (!element) return null;
+  var node = element;
+  var hops = 0;
+  while (node && hops < 8) {
+    var tag = (node.tagName || "").toLowerCase();
+    if (
+      tag === "spl-date-field" ||
+      tag === "spl-date-picker" ||
+      tag.indexOf("date-field") > -1 ||
+      tag.indexOf("date-picker") > -1
+    ) {
+      var t = (node.getAttribute("type") || "").toLowerCase();
+      return t || "date";
+    }
+    node = node.parentElement || (node.getRootNode && node.getRootNode().host);
+    hops++;
+  }
+  return null;
+}
+
 async function fillDateField(element, dateStr) {
   if (!dateStr) return false;
 
@@ -606,6 +632,21 @@ async function fillDateField(element, dateStr) {
     if (!isoM) return false;
     fillInputField(element, isoM);
     return true;
+  }
+
+  // ── 2bis. SmartRecruiters <spl-date-field type="month-year"> ────────────
+  // L'input texte interne accepte le format MM/AAAA. Sans ce détecteur,
+  // on tombait sur le format JJ/MM/AAAA par défaut qui est rejeté.
+  var splType = getSplDatePickerType(element);
+  if (splType === "month-year") {
+    var mmy = toMonthYear(dateStr);
+    if (!mmy) return false;
+    return await typeIntoField(element, mmy);
+  }
+  if (splType === "year") {
+    var yOnly = toYearOnly(dateStr);
+    if (!yOnly) return false;
+    return await typeIntoField(element, yOnly);
   }
 
   var ph = normalize(element.getAttribute("placeholder") || "");
