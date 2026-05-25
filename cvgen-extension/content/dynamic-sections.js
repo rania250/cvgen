@@ -458,6 +458,14 @@ var FORMATION_SUBFIELDS = {
     "school location",
     "school city",
   ],
+  description: [
+    "description",
+    "missions",
+    "détails",
+    "achievements",
+    "summary",
+    "responsibilities",
+  ],
   country_education: [
     "country of education",
     "pays de formation",
@@ -2067,7 +2075,11 @@ async function fillFormationSections(profil) {
       diplome_plus_eleve: i === 0 ? "Oui" : "Non",
       etablissement: form.etablissement || "",
       annee_obtention: form.annee || form.dateFin || "",
+      date_debut: form.dateDebut || "",
+      date_fin: form.dateFin || "",
       domaine: form.mention || form.domaine || "",
+      lieu: form.lieu || form.ville || "",
+      description: form.description || "",
       country_education: "France",
     };
 
