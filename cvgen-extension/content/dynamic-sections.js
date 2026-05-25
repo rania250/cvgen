@@ -747,10 +747,21 @@ function clickElementRobust(el) {
   try {
     target.focus();
     if (isCustomEl && typeof target.click === "function") {
-      // .click() natif : équivalent d'un clic utilisateur, traverse le
-      // shadow DOM et déclenche les handlers internes du Web Component.
+      // .click() natif : équivalent d'un clic utilisateur, déclenche les
+      // handlers attachés sur l'élément (et bubble dans le light DOM).
       target.click();
       Logger.log("Stratégie A (Web Component) : .click() natif appelé sur <" + target.tagName.toLowerCase() + ">");
+
+      // Aussi cliquer le <button> interne du shadow DOM si présent.
+      // Certains Web Components Lit/Stencil n'écoutent que sur leur
+      // <button> interne (pas sur le wrapper).
+      if (target.shadowRoot) {
+        var innerBtn = target.shadowRoot.querySelector('button, [role="button"]');
+        if (innerBtn) {
+          try { innerBtn.click(); } catch (_) {}
+          Logger.log("Stratégie A bis : click sur <button> interne du shadow DOM");
+        }
+      }
     } else {
       target.dispatchEvent(new MouseEvent("click", {
         bubbles: true, cancelable: true, view: window,
@@ -1496,8 +1507,14 @@ async function fillExperienceSections(profil) {
       var afterCount = querySelectorAllDeep(
         document, 'input:not([type="hidden"]), textarea, select'
       ).length;
+      // Aussi compter les éventuels Web Components type input (SmartRecruiters)
+      var afterCustomCount = querySelectorAllDeep(
+        document, 'spl-input, spl-textarea, spl-select, spl-form-field, ' +
+        'spl-text-input, spl-datepicker, [class*="form-field"]'
+      ).length;
       Logger.log(
-        "Après clic exp : " + beforeSnapshot.size + " input(s) avant → " + afterCount + " après (deep)"
+        "Après clic exp : " + beforeSnapshot.size + " input(s) avant → " + afterCount +
+        " standards + " + afterCustomCount + " SPL custom"
       );
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
