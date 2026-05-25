@@ -1487,10 +1487,18 @@ async function fillExperienceSections(profil) {
       var beforeDeletes = snapshotDeleteButtons();
       Logger.log(
         "Clic Ajouter exp #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
-        " class='" + (addBtn.className || "").substring(0, 60) + "'>"
+        " class='" + (addBtn.className || "").substring(0, 60) +
+        "' aria='" + (addBtn.getAttribute("aria-label") || "") + "'>"
       );
       clickElementRobust(addBtn);
       await waitForNewFields(2500);
+
+      var afterCount = querySelectorAllDeep(
+        document, 'input:not([type="hidden"]), textarea, select'
+      ).length;
+      Logger.log(
+        "Après clic exp : " + beforeSnapshot.size + " input(s) avant → " + afterCount + " après (deep)"
+      );
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
@@ -1772,10 +1780,18 @@ async function fillFormationSections(profil) {
       var beforeDeletes = snapshotDeleteButtons();
       Logger.log(
         "Clic Ajouter formation #" + (i + 1) + " sur <" + addBtn.tagName.toLowerCase() +
-        " class='" + (addBtn.className || "").substring(0, 60) + "'>"
+        " class='" + (addBtn.className || "").substring(0, 60) +
+        "' aria='" + (addBtn.getAttribute("aria-label") || "") + "'>"
       );
       clickElementRobust(addBtn);
       await waitForNewFields(2500);
+
+      var afterCountFm = querySelectorAllDeep(
+        document, 'input:not([type="hidden"]), textarea, select'
+      ).length;
+      Logger.log(
+        "Après clic formation : " + beforeSnapshot.size + " input(s) avant → " + afterCountFm + " après (deep)"
+      );
 
       var newContainer = findContainerOfNewEntry(beforeSnapshot, beforeDeletes);
       if (!newContainer) {
