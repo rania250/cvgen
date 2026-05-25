@@ -775,20 +775,11 @@ function clickElementRobust(el) {
     target.focus();
     if (isCustomEl && typeof target.click === "function") {
       // .click() natif : équivalent d'un clic utilisateur, déclenche les
-      // handlers attachés sur l'élément (et bubble dans le light DOM).
+      // handlers attachés sur l'élément ET propage dans le shadow DOM
+      // (le wrapper Web Component re-dispatch vers son <button> interne).
+      // UN seul click suffit — cliquer aussi le button interne ferait 2 ajouts.
       target.click();
       Logger.log("Stratégie A (Web Component) : .click() natif appelé sur <" + target.tagName.toLowerCase() + ">");
-
-      // Aussi cliquer le <button> interne du shadow DOM si présent.
-      // Certains Web Components Lit/Stencil n'écoutent que sur leur
-      // <button> interne (pas sur le wrapper).
-      if (target.shadowRoot) {
-        var innerBtn = target.shadowRoot.querySelector('button, [role="button"]');
-        if (innerBtn) {
-          try { innerBtn.click(); } catch (_) {}
-          Logger.log("Stratégie A bis : click sur <button> interne du shadow DOM");
-        }
-      }
     } else {
       target.dispatchEvent(new MouseEvent("click", {
         bubbles: true, cancelable: true, view: window,
@@ -975,13 +966,41 @@ function getInputLabel(el) {
       }
     } catch (_) {}
   }
-  return (
+  // aria-labelledby
+  var labelledBy = el.getAttribute("aria-labelledby");
+  if (labelledBy) {
+    try {
+      var ref = document.getElementById(labelledBy.split(/\s+/)[0]);
+      if (ref) {
+        var t2 = (ref.innerText || ref.textContent || "").trim();
+        if (t2) return t2;
+      }
+    } catch (_) {}
+  }
+  var direct =
     el.getAttribute("aria-label") ||
     el.getAttribute("placeholder") ||
     el.getAttribute("name") ||
     el.getAttribute("title") ||
-    ""
-  ).trim();
+    "";
+  if (direct) return direct.trim();
+
+  // Remontée dans l'arbre composé pour les Web Components SR
+  var composed = getComposedParent(el);
+  var hops = 0;
+  while (composed && hops < 8) {
+    var tag = composed.tagName ? composed.tagName.toLowerCase() : "";
+    if (tag.indexOf("form-field") > -1 || tag === "spl-input" ||
+        tag === "spl-textarea" || tag === "spl-select") {
+      var raw = (composed.innerText || composed.textContent || "")
+        .split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+      if (raw.length > 0) return raw[0];
+      break;
+    }
+    composed = getComposedParent(composed);
+    hops++;
+  }
+  return "";
 }
 
 /**
@@ -992,35 +1011,56 @@ function getInputLabel(el) {
 function isSFCombobox(el) {
   if (el.tagName !== "INPUT") return false;
 
-  // role=combobox = indice le plus fiable
-  if (el.getAttribute("role") === "combobox") return true;
+  // Critères STRICTEMENT SuccessFactors / SAP UI5.
+  // On n'utilise plus role=combobox seul (trop générique : SmartRecruiters,
+  // Workday et autres ATS l'utilisent aussi pour des inputs non-SF).
 
-  // aria-owns/controls vers une listbox
-  if (el.getAttribute("aria-owns") || el.getAttribute("aria-controls")) return true;
+  // 1. ID au format SF : "X:Y_input" (avec ":")
+  var idStr = el.getAttribute("id") || "";
+  if (idStr.indexOf(":") !== -1 && /_input$/.test(idStr)) return true;
 
-  // Classes SF connues
+  // 2. Bouton voisin _selectButton (convention SF stricte)
+  if (idStr) {
+    var btnId = idStr.replace(/_input$/, "_selectButton");
+    if (btnId !== idStr && document.getElementById(btnId)) return true;
+  }
+
+  // 3. Onclick/onblur/onfocus contenant juic.fire ou sap. (SAP UI5)
+  var inlineHandlers =
+    (el.getAttribute("onclick") || "") +
+    (el.getAttribute("onblur") || "") +
+    (el.getAttribute("onfocus") || "") +
+    (el.getAttribute("onkeydown") || "");
+  if (inlineHandlers.indexOf("juic") !== -1 || inlineHandlers.indexOf("sap.") !== -1) {
+    return true;
+  }
+
+  // 4. Classes SF spécifiques (pas "picker" générique)
   var classes = el.className || "";
   if (
     classes.indexOf("rcmpaginatedselect") !== -1 ||
     classes.indexOf("sfCascadingPicklist") !== -1 ||
-    classes.indexOf("picklist") !== -1
+    classes.indexOf("sfPicklist") !== -1
   ) return true;
 
-  // Bouton voisin _selectButton (SF nomme l'input "X_input" et le bouton "X_selectButton")
-  var id = el.getAttribute("id") || "";
-  if (id) {
-    var btnId = id.replace(/_input$/, "_selectButton");
-    if (btnId !== id && document.getElementById(btnId)) return true;
-  }
-
-  // Ancêtre avec classes picklist/select-container
+  // 5. Ancêtre avec classes SF strictes
   try {
     var ancestor = el.closest(
-      '[class*="paginatedPicklistContainer"], [class*="picklist"], ' +
-      '[class*="Picklist"], [class*="selectContainer"], [class*="select-container"]'
+      '[class*="paginatedPicklistContainer"], [class*="sfPicklist"], ' +
+      '[class*="sfCascadingPicklist"], [class*="rcmPicklist"]'
     );
     if (ancestor) return true;
   } catch (_) {}
+
+  // Vérification d'environnement : si l'URL contient successfactors,
+  // accepter role=combobox + aria-owns comme indice supplémentaire.
+  var isSFEnv = location.host && location.host.indexOf("successfactors") !== -1;
+  if (isSFEnv) {
+    if (el.getAttribute("role") === "combobox" &&
+        (el.getAttribute("aria-owns") || el.getAttribute("aria-controls"))) {
+      return true;
+    }
+  }
 
   return false;
 }
@@ -1387,7 +1427,9 @@ function detectSubfieldType(el, subfields) {
     el.getAttribute("id") || "",
     el.getAttribute("placeholder") || "",
     el.getAttribute("aria-label") || "",
+    el.getAttribute("aria-labelledby") || "",
     el.getAttribute("data-label") || "",
+    el.getAttribute("title") || "",
   ];
 
   var id = el.getAttribute("id");
@@ -1396,6 +1438,18 @@ function detectSubfieldType(el, subfields) {
       var label = document.querySelector('label[for="' + CSS.escape(id) + '"]');
       if (label) candidates.push(label.innerText || "");
     } catch (_) {}
+  }
+
+  // Label via aria-labelledby (peut référencer un élément dans le light DOM)
+  var labelledBy = el.getAttribute("aria-labelledby");
+  if (labelledBy) {
+    var ids = labelledBy.split(/\s+/);
+    for (var li = 0; li < ids.length; li++) {
+      try {
+        var refEl = document.getElementById(ids[li]);
+        if (refEl) candidates.push(refEl.innerText || refEl.textContent || "");
+      } catch (_) {}
+    }
   }
 
   var parentLabel = el.closest("label");
@@ -1414,6 +1468,37 @@ function detectSubfieldType(el, subfields) {
       c.remove();
     });
     candidates.push((clone2.innerText || "").split("\n")[0]);
+  }
+
+  // Remonter dans l'arbre COMPOSÉ (traverse les shadow roots) pour trouver
+  // un <spl-form-field>, <spl-typography> ou conteneur de label.
+  // SmartRecruiters : l'<input> est dans le shadow root d'un <spl-input>,
+  // qui est lui-même dans un <spl-form-field> portant le label.
+  var composed = getComposedParent(el);
+  var hops = 0;
+  while (composed && hops < 8) {
+    var tag = composed.tagName ? composed.tagName.toLowerCase() : "";
+    // Cible : Web Components type form-field, ou éléments avec label
+    var isLabelHost =
+      tag.indexOf("form-field") > -1 ||
+      tag.indexOf("typography") > -1 ||
+      tag === "spl-input" || tag === "spl-textarea" || tag === "spl-select" ||
+      (composed.classList && (
+        composed.classList.contains("form-field") ||
+        composed.className && composed.className.toString().indexOf("form-field") > -1
+      ));
+    if (isLabelHost) {
+      var rawTxt = (composed.innerText || composed.textContent || "")
+        .split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+      // 1er bout de texte non vide = label probable
+      if (rawTxt.length > 0) {
+        candidates.push(rawTxt[0]);
+        candidates.push(rawTxt.slice(0, 2).join(" "));
+      }
+      break;
+    }
+    composed = getComposedParent(composed);
+    hops++;
   }
 
   var normalizedCandidates = candidates.map(normalize).filter(Boolean);
