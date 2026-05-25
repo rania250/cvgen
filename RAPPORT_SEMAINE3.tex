@@ -1,0 +1,249 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage[top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm,headheight=15pt]{geometry}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage[most]{tcolorbox}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{etoolbox}
+\AtBeginEnvironment{tabular}{\setlength{\parskip}{0pt}}
+\AtBeginEnvironment{tabularx}{\setlength{\parskip}{0pt}}
+
+%% ─── Palette de couleurs ─────────────────────────────────────────
+\definecolor{navyblue}{RGB}{31,41,55}
+\definecolor{accentblue}{RGB}{59,130,246}
+\definecolor{rowalt}{RGB}{249,250,251}
+\definecolor{zakariae}{RGB}{30,64,175}
+\definecolor{rania}{RGB}{153,27,27}
+\definecolor{techbg}{RGB}{239,246,255}
+\definecolor{livbg}{RGB}{240,253,244}
+\definecolor{livgreen}{RGB}{21,128,61}
+\definecolor{subtlegray}{RGB}{107,114,128}
+\definecolor{tablegray}{RGB}{226,232,240}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\renewcommand{\arraystretch}{1.35}
+
+%% ─── En-tête / Pied de page ──────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{1.5pt}
+\renewcommand{\headrule}{{\color{accentblue}\hrule width\headwidth height\headrulewidth}}
+\fancyhead[L]{\small\textbf{CVGen --- Rapport de Sprint S3}~\textcolor{subtlegray}{|~18 -- 25 mai 2026}}
+\fancyfoot[R]{\small\textcolor{subtlegray}{Page \thepage}}
+
+%% ─── Mise en forme des sections ──────────────────────────────────
+\titleformat{\section}
+  {\Large\bfseries\color{navyblue}}{}{0em}{}
+  [{\color{accentblue}\rule{\linewidth}{1.5pt}}]
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{navyblue}}{}{0em}{}
+  [{\color{accentblue}\rule{3cm}{1pt}}]
+\titlespacing*{\section}{0pt}{16pt}{8pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+
+%% ─── Types de colonnes personnalisés ─────────────────────────────
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\THead}[1]{\cellcolor{navyblue}\leavevmode\color{white}\bfseries #1}
+
+\begin{document}
+
+%% ═══════════════════════════════════════════════════════════════
+%% PAGE 1 — COUVERTURE
+%% ═══════════════════════════════════════════════════════════════
+\thispagestyle{fancy}
+
+\vspace*{0.5cm}
+\begin{center}
+  \includegraphics[width=7cm]{logo_uha}
+\end{center}
+
+\vspace*{0.8cm}
+\begin{center}
+  {\fontsize{52}{60}\selectfont\bfseries\textcolor{navyblue}{CVGen}}\\[0.4em]
+  {\large\textcolor{subtlegray}{Plateforme SaaS de g\'en\'eration intelligente de CV}}\\[3em]
+
+  \begin{tcolorbox}[
+    colback=navyblue, colframe=navyblue,
+    width=10cm, arc=3pt,
+    halign=center,
+    left=8pt, right=8pt, top=10pt, bottom=10pt
+  ]
+    {\large\bfseries\textcolor{white}{RAPPORT DE SPRINT S3}}\\[4pt]
+    \textcolor{accentblue!70!white}{Extension Chrome avanc\'ee \& G\'en\'eration de CV}\\[3pt]
+    \textcolor{white!70!navyblue}{18 -- 25 mai 2026}
+  \end{tcolorbox}
+\end{center}
+
+\vfill
+
+{\setlength{\arrayrulewidth}{0.5pt}
+\arrayrulecolor{tablegray}
+\begin{tabular}{|p{8cm}|p{5.5cm}|}
+\hline
+\rowcolor{navyblue!8}\textbf{R\'ealis\'e par :} & \textbf{Encadr\'e par :} \\
+\hline
+Zakariae ABDOUNI & M. Frederic Cordier \\
+Rania MAMOU & \\[3pt]
+\textbf{Fili\`ere :} & \\
+Informatique et mobilit\'e & \\
+\hline
+\end{tabular}}
+
+\vspace{2em}
+\begin{center}
+  {\large Ann\'ee Universitaire:~2025 -- 2026}
+\end{center}
+\vspace{1em}
+
+\clearpage
+
+%% ═══════════════════════════════════════════════════════════════
+%% PAGE 2 — TRAVAUX RÉALISÉS
+%% ═══════════════════════════════════════════════════════════════
+
+\section{Semaine 3 --- Travaux r\'ealis\'es (18--25 mai 2026)}
+
+Cette semaine, Rania a finalis\'e l'extension Chrome avec un support complet des ATS majeurs, la gestion des sections dynamiques et la synchronisation avec le backend CVGen. Zakariae a avanc\'e sur l'import de CV PDF/Word et le module de g\'en\'eration IA.
+
+\subsection{Extension Chrome --- Support ATS avanc\'e (Rania)}
+
+{\setlength{\arrayrulewidth}{0.5pt}\arrayrulecolor{tablegray}
+\begin{tabularx}{\linewidth}{|L{3.5cm}|X|L{2cm}|}
+\hline
+\THead{T\^ache} & \THead{D\'etails} & \THead{Assign\'e} \\
+\hline
+\rowcolor{rowalt}\textbf{Remplissage automatique multi-ATS} & D\'etection et remplissage intelligent de 12+ types de champs (identit\'e, exp\'eriences, formations, comp\'etences, langues) sur les principaux ATS : SuccessFactors, Taleo, Workday, LinkedIn, Indeed, SmartRecruiters & \textcolor{rania}{\textbf{Rania}} \\
+\hline
+\textbf{Sections dynamiques} & Ajout automatique d'entr\'ees multiples (exp\'eriences, formations, certifications, langues) en simulant les clics sur les boutons \guillemotleft~Ajouter~\guillemotright, compatible accordions et formulaires imbriqu\'es & \textcolor{rania}{\textbf{Rania}} \\
+\hline
+\rowcolor{rowalt}\textbf{Injection fichiers dans les ATS} & D\'etection automatique des champs \texttt{<input type="file">} sur les portails de recrutement et injection du CV PDF et de la lettre de motivation, compatible Shadow DOM, SuccessFactors, Workday, LinkedIn & \textcolor{rania}{\textbf{Rania}} \\
+\hline
+\end{tabularx}}
+
+\subsection{G\'en\'eration de CV \& Import (Zakariae)}
+
+{\setlength{\arrayrulewidth}{0.5pt}\arrayrulecolor{tablegray}
+\begin{tabularx}{\linewidth}{|L{3.5cm}|X|L{2cm}|}
+\hline
+\THead{T\^ache} & \THead{D\'etails} & \THead{Assign\'e} \\
+\hline
+\rowcolor{rowalt}\textbf{Import CV PDF/Word} & Extraction automatique des donn\'ees depuis PDF (Apache PDFBox) et Word (.docx, Apache POI) vers le profil utilisateur & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\hline
+\textbf{Module G\'en\'eration CV} & Int\'egration IA (Gemini) + LaTeX/Tectonic pour la g\'en\'eration de CV personnalis\'e par offre, export PDF haute qualit\'e & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\hline
+\rowcolor{rowalt}\textbf{Scoring ATS} & Analyse de correspondance offre/profil, calcul du score ATS, suggestions d'optimisation des mots-cl\'es & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\hline
+\end{tabularx}}
+
+\clearpage
+
+%% ═══════════════════════════════════════════════════════════════
+%% PAGE 3 — TECHNOLOGIES, LIVRABLES
+%% ═══════════════════════════════════════════════════════════════
+
+\section{Technologies utilis\'ees cette semaine}
+
+{\setlength{\arrayrulewidth}{0.5pt}\arrayrulecolor{tablegray}
+\begin{tabularx}{\linewidth}{|X|X|X|}
+\hline
+\THead{Backend} & \THead{Extension Chrome} & \THead{Infrastructure / Outils} \\
+\hline
+\rowcolor{rowalt} Spring Boot 3.2 / Java 17 & Chrome MV3 / Vanilla JS & Docker / Compose \\
+\hline
+PostgreSQL 16 / Flyway & Content Scripts & GitHub Actions CI \\
+\hline
+\rowcolor{rowalt} Apache PDFBox / Apache POI & Service Worker & Tectonic (LaTeX PDF) \\
+\hline
+Gemini API (IA) & \texttt{waitForElement} / DOM events & Git (multi-remote) \\
+\hline
+\end{tabularx}}
+
+\section{Livrables du sprint S3}
+
+\begin{tcolorbox}[
+  colback=livbg, colframe=livgreen,
+  arc=3pt, left=8pt, right=8pt, top=6pt, bottom=6pt
+]
+\textcolor{livgreen}{\textbf{Crit\`eres de compl\'etion :} Dropdowns SF remplis~\textbullet~Endpoint profil op\'erationnel~\textbullet~G\'en\'eration CV fonctionnelle}
+\vspace{4pt}
+{\color{livgreen!50!black}\rule{\linewidth}{0.5pt}}
+\vspace{4pt}
+\begin{itemize}[leftmargin=1.2em, itemsep=2pt, topsep=0pt, parsep=0pt]
+  \item Remplissage automatique sur 12+ ATS/jobboards : SuccessFactors, Taleo, Workday, LinkedIn, Indeed, SmartRecruiters\ldots
+  \item Support des composants custom (dropdowns SuccessFactors, accordions, sections dynamiques avec boutons \guillemotleft~Ajouter~\guillemotright)
+  \item Injection automatique du CV et de la lettre de motivation dans les champs de fichier des portails ATS (Shadow DOM, SuccessFactors, Workday, LinkedIn)
+  \item Extraction automatique du titre et du texte de l'offre depuis la page de candidature
+  \item Import CV PDF et Word vers profil utilisateur
+  \item G\'en\'eration de CV personnalis\'e via IA (Gemini) + export PDF (Tectonic/LaTeX)
+  \item Scoring ATS : correspondance offre/profil avec suggestions
+\end{itemize}
+\end{tcolorbox}
+
+\clearpage
+
+%% ═══════════════════════════════════════════════════════════════
+%% PAGE 4 — ROADMAP SEMAINE 4
+%% ═══════════════════════════════════════════════════════════════
+
+\section{Semaine 4 --- Roadmap (26 mai -- 1\textsuperscript{er} juin 2026)}
+
+Pour la semaine 4, Rania int\`egre un agent IA dans l'extension Chrome capable de postuler automatiquement \`a des offres d'emploi. Zakariae travaille sur la g\'en\'eration de lettre de motivation c\^ot\'e backend et l'am\'elioration de l'exp\'erience utilisateur (choix de template CV, UI/UX).
+
+\subsection{Rania --- Agent IA de candidature automatique (S4)}
+
+{\setlength{\arrayrulewidth}{0.5pt}\arrayrulecolor{tablegray}
+\begin{tabularx}{\linewidth}{|L{3.5cm}|X|L{2cm}|}
+\hline
+\THead{T\^ache} & \THead{D\'etails} & \THead{Assign\'e} \\
+\hline
+\rowcolor{rowalt}\textbf{Agent IA auto-postulation} & Int\'egration dans l'extension Chrome d'un agent IA qui analyse une offre, adapte le profil CVGen, puis d\'eclenche automatiquement le remplissage et la soumission du formulaire & \textcolor{rania}{\textbf{Rania}} \\
+\hline
+\textbf{Upload CV dans l'extension} & T\'el\'echargement du CV g\'en\'er\'e (PDF) depuis le popup de l'extension vers les champs de t\'el\'echargement des ATS & \textcolor{rania}{\textbf{Rania}} \\
+\hline
+\end{tabularx}}
+
+\subsection{Zakariae --- Lettre de motivation \& Templates CV (S4)}
+
+{\setlength{\arrayrulewidth}{0.5pt}\arrayrulecolor{tablegray}
+\begin{tabularx}{\linewidth}{|L{3.5cm}|X|L{2cm}|}
+\hline
+\THead{T\^ache} & \THead{D\'etails} & \THead{Assign\'e} \\
+\hline
+\rowcolor{rowalt}\textbf{Lettre de motivation IA} & G\'en\'eration automatique c\'ot\'e backend (Gemini), personnalis\'ee par offre, expos\'ee via API et injectable depuis l'extension & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\hline
+\textbf{Choix de template CV} & S\'election de template dans l'interface web (3 mod\`eles minimum), pr\'evisualisation en temps r\'eel, export PDF & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\hline
+\rowcolor{rowalt}\textbf{Am\'elioration UI/UX site} & Am\'elioration du dashboard web (animations, accessibilit\'e, retours utilisateur) & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\hline
+\end{tabularx}}
+
+\section{Conclusion}
+
+L'extension Chrome a fait un bond significatif cette semaine : le support des portails RH type SAP SuccessFactors est op\'erationnel, les bugs de d\'etection de champs sont corrig\'es, et la synchronisation avec le backend est fonctionnelle gr\^ace au nouvel endpoint \texttt{/api/profile/complet}. La couverture monte \`a 12 ATS/jobboards support\'es.
+
+C\^ot\'e backend, le module de g\'en\'eration de CV (Gemini + Tectonic) est en place et l'import de fichiers CV existants est pris en charge. Le scoring ATS compl\`ete la cha\^ine de valeur de la plateforme.
+
+La semaine 4 se concentre sur l'automatisation compl\`ete : Rania int\`egre l'agent IA de postulation dans l'extension Chrome, tandis que Zakariae finalise la g\'en\'eration de lettre de motivation c\^ot\'e backend et le choix de templates CV.
+
+\vspace{1em}
+
+\begin{tcolorbox}[
+  colback=techbg, colframe=accentblue,
+  arc=3pt, left=8pt, right=8pt, top=6pt, bottom=6pt
+]
+\textbf{Prochain rapport :} Sprint S4 --- Agent IA extension (Rania) \& Lettre de motivation backend (Zakariae) --- 26 mai 2026
+\end{tcolorbox}
+
+\end{document}
