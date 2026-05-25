@@ -355,7 +355,10 @@ var EXPERIENCE_SUBFIELDS = {
     "currently employed",
     "current position",
     "i currently work here",
+    "i am currently working here",
     "est ce votre emploi actuel",
+    "annee en cours",
+    "année en cours",
   ],
 };
 
@@ -470,6 +473,19 @@ var FORMATION_SUBFIELDS = {
     "country of education",
     "pays de formation",
     "pays d education",
+  ],
+  // Réutilisé pour la checkbox "Année en cours" / "I am currently studying"
+  employeur_actuel: [
+    "annee en cours",
+    "année en cours",
+    "currently studying",
+    "i am currently studying",
+    "i currently study here",
+    "j etudie actuellement",
+    "etudes en cours",
+    "études en cours",
+    "en cours d etudes",
+    "formation en cours",
   ],
 };
 
@@ -1033,6 +1049,14 @@ async function fillSubfields(container, subfields, values) {
       } else if (el.tagName === "TEXTAREA") {
         fillTextareaField(el, value);
         strategy = "fillTextareaField";
+      } else if (el.type === "checkbox" || el.type === "radio") {
+        // Checkbox "Je travaille actuellement ici", "Année en cours", etc.
+        var cbOk = fillCheckboxOrRadio(el, value);
+        strategy = "fillCheckboxOrRadio(" + (cbOk ? "ok" : "ECHEC") + ")";
+        if (!cbOk) {
+          Logger.log("  " + debugId + " → fieldKey=" + fieldKey + " value=" + value + " → " + strategy);
+          continue;
+        }
       } else if (isSFCombobox(el)) {
         var ok = await fillSFCombobox(el, value);
         strategy = "fillSFCombobox(" + (ok ? "ok" : "ECHEC") + ")";
@@ -1103,8 +1127,16 @@ function getInputLabel(el) {
   var hops = 0;
   while (composed && hops < 8) {
     var tag = composed.tagName ? composed.tagName.toLowerCase() : "";
-    if (tag.indexOf("form-field") > -1 || tag === "spl-input" ||
-        tag === "spl-textarea" || tag === "spl-select") {
+    if (
+      tag.indexOf("form-field") > -1 ||
+      tag === "spl-input" ||
+      tag === "spl-textarea" ||
+      tag === "spl-select" ||
+      tag === "spl-checkbox" ||
+      tag === "spl-radio" ||
+      tag === "spl-toggle" ||
+      tag === "spl-switch"
+    ) {
       var raw = (composed.innerText || composed.textContent || "")
         .split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
       if (raw.length > 0) return raw[0];
@@ -1750,14 +1782,24 @@ async function fillExperienceSections(profil) {
       container = newContainer;
     }
 
+    // Heuristique "expérience en cours" : si l'API marque actuel=true,
+    // OU si dateFin est vide / identique à dateDebut → on coche la
+    // checkbox "Je travaille actuellement ici" et on n'envoie PAS date_fin.
+    // Sur SmartRecruiters, remplir À avec une date provoque une validation
+    // qui empêche la sauvegarde.
+    var isCurrent =
+      !!exp.actuel ||
+      !exp.dateFin ||
+      (exp.dateDebut && exp.dateDebut === exp.dateFin);
+
     var values = {
       poste: exp.poste || "",
       entreprise: exp.entreprise || "",
       date_debut: exp.dateDebut || "",
-      date_fin: exp.dateFin || "",
+      date_fin: isCurrent ? "" : exp.dateFin || "",
       lieu: exp.lieu || "",
       description: exp.description || "",
-      employeur_actuel: exp.actuel ? "Oui" : "Non",
+      employeur_actuel: isCurrent ? "Oui" : "Non",
     };
 
     var filled = await fillSubfields(container, EXPERIENCE_SUBFIELDS, values);
@@ -2067,6 +2109,12 @@ async function fillFormationSections(profil) {
       container = newContainer;
     }
 
+    // Heuristique formation en cours : actuel=true OU dateFin absent
+    var isFormCurrent =
+      !!form.actuel ||
+      !form.dateFin ||
+      (form.dateDebut && form.dateDebut === form.dateFin);
+
     var values = {
       nom_formation: form.diplome || form.niveauEtudes || "",
       diplome: form.niveauEtudes || form.diplome || "",
@@ -2076,11 +2124,13 @@ async function fillFormationSections(profil) {
       etablissement: form.etablissement || "",
       annee_obtention: form.annee || form.dateFin || "",
       date_debut: form.dateDebut || "",
-      date_fin: form.dateFin || "",
+      date_fin: isFormCurrent ? "" : form.dateFin || "",
       domaine: form.mention || form.domaine || "",
       lieu: form.lieu || form.ville || "",
       description: form.description || "",
       country_education: "France",
+      // SmartRecruiters : checkbox "Année en cours" / "Currently studying"
+      employeur_actuel: isFormCurrent ? "Oui" : "Non",
     };
 
     var filled = await fillSubfields(container, FORMATION_SUBFIELDS, values);
