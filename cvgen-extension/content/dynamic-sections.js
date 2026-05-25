@@ -14,6 +14,8 @@ var SECTION_PATTERNS = {
     "experience professionnelle",
     "expériences professionnelles",
     "expériences",
+    "expérience",
+    "experience",
     "parcours professionnel",
     "historique professionnel",
     "work experience",
@@ -27,10 +29,13 @@ var SECTION_PATTERNS = {
     "parcours academique",
     "niveau d études",
     "diplôme",
+    "enseignement",
+    "éducation",
     "educational background",
     "academic background",
     "academic history",
     "education",
+    "studies",
   ],
   certification: [
     "certifications",
@@ -141,6 +146,8 @@ var EXPERIENCE_SUBFIELDS = {
     "role",
     "titre du poste",
     "intitulé du poste",
+    "intitulé",
+    "intitule",
     "fonction",
     "job title",
     "position",
@@ -166,27 +173,36 @@ var EXPERIENCE_SUBFIELDS = {
     "date debut",
     "début",
     "début d emploi",
+    "du",
+    "depuis",
     "start date",
     "from",
     "date from",
     "employment start",
+    "starting",
   ],
   date_fin: [
     "date de fin",
     "date fin",
     "fin",
     "fin d emploi",
+    "à",
+    "jusqu à",
+    "jusqu a",
     "end date",
     "to",
     "date to",
     "employment end",
-    "jusqu à",
+    "until",
   ],
   lieu: [
     "lieu",
     "ville",
     "localisation",
     "lieu de travail",
+    "emplacement",
+    "emplacement du bureau",
+    "office location",
     "location",
     "city",
     "work location",
@@ -207,9 +223,12 @@ var EXPERIENCE_SUBFIELDS = {
   employeur_actuel: [
     "employeur actuel",
     "poste actuel",
+    "je travaille actuellement ici",
+    "je travaille actuellement",
     "current employer",
     "currently employed",
     "current position",
+    "i currently work here",
     "est ce votre emploi actuel",
   ],
 };
@@ -1303,7 +1322,25 @@ function detectSubfieldType(el, subfields) {
       for (var k = 0; k < keywords.length; k++) {
         var kw = keywords[k];
         if (!kw) continue;
-        if (cand === kw || cand.includes(kw)) {
+        // Pour les keywords TRÈS courts (≤ 3 chars), exiger match exact OU
+        // word-boundary. Sinon "du" matcherait "produit", "introduit", etc.
+        var matched;
+        if (kw.length <= 3) {
+          if (cand === kw) {
+            matched = true;
+          } else {
+            // word-boundary regex sur la chaîne normalisée (lettres/chiffres/espaces)
+            try {
+              var re = new RegExp("(^|\\s)" + kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(\\s|$)");
+              matched = re.test(cand);
+            } catch (_) {
+              matched = false;
+            }
+          }
+        } else {
+          matched = (cand === kw || cand.includes(kw));
+        }
+        if (matched) {
           if (kw.length > bestScore) {
             bestScore = kw.length;
             bestKey = key;
