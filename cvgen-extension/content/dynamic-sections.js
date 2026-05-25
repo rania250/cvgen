@@ -6,6 +6,31 @@
  * Compatible SuccessFactors (accordéons), Workday, Taleo, SmartRecruiters.
  */
 
+// ─── Helpers Shadow DOM ───────────────────────────────────────────────────────
+
+/**
+ * querySelectorAll qui traverse récursivement les Shadow DOM (open).
+ * Indispensable pour SmartRecruiters (Web Components SPL), Workday, etc.
+ */
+function querySelectorAllDeep(root, selector) {
+  root = root || document;
+  var results = [];
+  try {
+    var found = root.querySelectorAll(selector);
+    for (var i = 0; i < found.length; i++) results.push(found[i]);
+  } catch (_) {}
+
+  var allEls;
+  try { allEls = root.querySelectorAll("*"); } catch (_) { return results; }
+  for (var j = 0; j < allEls.length; j++) {
+    if (allEls[j].shadowRoot) {
+      var shadowResults = querySelectorAllDeep(allEls[j].shadowRoot, selector);
+      for (var k = 0; k < shadowResults.length; k++) results.push(shadowResults[k]);
+    }
+  }
+  return results;
+}
+
 // ─── Détecteurs de sections ───────────────────────────────────────────────────
 
 var SECTION_PATTERNS = {
@@ -73,14 +98,15 @@ var SECTION_PATTERNS = {
 async function expandSection(type) {
   var patterns = SECTION_PATTERNS[type].map(normalize);
 
-  // Sélecteurs courants pour les headers d'accordéon (SF, Workday, Taleo, etc.)
-  var candidates = Array.from(
-    document.querySelectorAll(
-      'button, [role="button"], summary, a, h2, h3, h4, h5, ' +
-        '[class*="accordion"], [class*="section-header"], [class*="panel-title"], ' +
-        '[class*="panel-heading"], [class*="acc-header"], [class*="acc-title"], ' +
-        '[class*="toggle"], [class*="collapse"], [class*="expand"]',
-    ),
+  // Sélecteurs courants pour les headers d'accordéon (SF, Workday, Taleo, SR…)
+  // Avec traversée Shadow DOM pour les Web Components (SmartRecruiters SPL).
+  var candidates = querySelectorAllDeep(
+    document,
+    'button, [role="button"], summary, a, h2, h3, h4, h5, h6, ' +
+      '[class*="accordion"], [class*="section-header"], [class*="panel-title"], ' +
+      '[class*="panel-heading"], [class*="acc-header"], [class*="acc-title"], ' +
+      '[class*="toggle"], [class*="collapse"], [class*="expand"], ' +
+      '[class*="typography"], spl-typography-title, spl-typography',
   );
 
   var headerEl = null;
@@ -410,14 +436,33 @@ var LANGUE_SUBFIELDS = {
  */
 function findSection(type) {
   var patterns = SECTION_PATTERNS[type].map(normalize);
-  var headings = Array.from(
-    document.querySelectorAll(
-      'h1, h2, h3, h4, h5, legend, summary, ' +
-        '[class*="section"], [class*="header"], [class*="heading"], [class*="title"], ' +
-        '[class*="panel-heading"], [class*="acc-header"], [class*="accordion"], ' +
-        '[role="heading"], [role="tab"]',
-    ),
+  // Sélecteur élargi : tags standards + custom elements Web Components
+  // (SmartRecruiters SPL : <spl-typography-title>, etc.) via traversée
+  // shadow DOM et match sur tagName ou attributs.
+  var headings = querySelectorAllDeep(
+    document,
+    'h1, h2, h3, h4, h5, h6, legend, summary, ' +
+      '[class*="section"], [class*="header"], [class*="heading"], [class*="title"], ' +
+      '[class*="panel-heading"], [class*="acc-header"], [class*="accordion"], ' +
+      '[class*="typography"], ' +
+      '[role="heading"], [role="tab"], ' +
+      // Web Components — convention "tag avec tiret"
+      'spl-typography-title, spl-typography, spl-section-title, ' +
+      '[is*="title"], [is*="heading"]',
   );
+
+  // Fallback : si rien trouvé, scanner tous les custom elements (tag avec tiret)
+  // dont le innerText est court (≤ 80 chars = heading-like).
+  if (headings.length === 0 || true) {
+    var customEls = querySelectorAllDeep(document, '*');
+    for (var x = 0; x < customEls.length; x++) {
+      var ce = customEls[x];
+      if (ce.tagName && ce.tagName.indexOf("-") > -1) {
+        // C'est un custom element (Web Component)
+        if (headings.indexOf(ce) === -1) headings.push(ce);
+      }
+    }
+  }
 
   var best = null;
   var bestLen = Infinity;
@@ -425,11 +470,9 @@ function findSection(type) {
   for (var i = 0; i < headings.length; i++) {
     var raw = (headings[i].innerText || headings[i].textContent || "").substring(0, 200);
     var text = normalize(raw);
-    if (!text) continue;
+    if (!text || text.length > 100) continue;
     for (var j = 0; j < patterns.length; j++) {
       if (text.includes(patterns[j])) {
-        // Privilégier le candidat dont le texte est le plus court (= header pur,
-        // pas un parent qui englobe toute la section)
         if (text.length < bestLen) {
           best = headings[i];
           bestLen = text.length;
@@ -475,14 +518,17 @@ function findAddButton(sectionEl, expectedType) {
   }
 
   // Sélecteur étendu : SF (addRowButton), Taleo (ftl-add-link, add-link),
-  // Workday (data-automation-id) et inputs button/submit/image.
+  // Workday (data-automation-id), SmartRecruiters (spl-button) et inputs.
   var BTN_SELECTOR =
     'button, a, [role="button"], ' +
     'input[type="button"], input[type="submit"], input[type="image"], ' +
     'span[onclick], div[onclick], li[onclick], i[onclick], ' +
     '.addRowButton, [class*="addRow"], [id*="addRow"], ' +
     '[class*="add-link"], [class*="addLink"], [class*="ftl-add"], ' +
-    '[data-action*="add"], [data-automation-id*="add"]';
+    '[class*="add-button"], [class*="addButton"], ' +
+    '[data-action*="add"], [data-automation-id*="add"], ' +
+    // SmartRecruiters Pattern Library : <spl-button>, <spl-icon-button>, etc.
+    'spl-button, spl-icon-button, [is*="button"]';
 
   // ── Filtre par type attendu (utilisé seulement si expectedType passé) ──
   // SuccessFactors marque chaque addRowButton avec :
@@ -523,9 +569,9 @@ function findAddButton(sectionEl, expectedType) {
   }
 
   // 1. Si typePatterns est défini : recherche GLOBALE filtrée par type
-  //    (prioritaire car plus fiable que la proximité DOM)
+  //    (prioritaire car plus fiable que la proximité DOM). Traverse Shadow DOM.
   if (typePatterns) {
-    var allBtnsGlobal = Array.from(document.querySelectorAll(BTN_SELECTOR));
+    var allBtnsGlobal = querySelectorAllDeep(document, BTN_SELECTOR);
     var typedCandidates = allBtnsGlobal.filter(isAddBtnTyped);
     if (typedCandidates.length > 0) {
       Logger.debug(
@@ -540,7 +586,7 @@ function findAddButton(sectionEl, expectedType) {
   // 2. Chercher dans le parent immédiat (5 niveaux)
   var parent = sectionEl.parentElement;
   for (var level = 0; level < 5 && parent; level++) {
-    var btns = Array.from(parent.querySelectorAll(BTN_SELECTOR));
+    var btns = querySelectorAllDeep(parent, BTN_SELECTOR);
     for (var i = 0; i < btns.length; i++) {
       if (isAddBtn(btns[i])) {
         Logger.debug("Bouton Ajouter trouvé (parent lvl " + level + "): " + (btns[i].title || btns[i].innerText || "").substring(0, 40));
@@ -555,7 +601,7 @@ function findAddButton(sectionEl, expectedType) {
   var maxSib = 15;
   while (sibling && maxSib-- > 0) {
     if (isAddBtn(sibling)) return sibling;
-    var sibBtns = Array.from(sibling.querySelectorAll(BTN_SELECTOR));
+    var sibBtns = querySelectorAllDeep(sibling, BTN_SELECTOR);
     for (var k = 0; k < sibBtns.length; k++) {
       if (isAddBtn(sibBtns[k])) {
         Logger.debug("Bouton Ajouter trouvé (sibling): " + (sibBtns[k].title || sibBtns[k].innerText || "").substring(0, 40));
@@ -565,8 +611,8 @@ function findAddButton(sectionEl, expectedType) {
     sibling = sibling.nextElementSibling;
   }
 
-  // 4. Fallback global non-typé : proximité verticale avec le header
-  var allBtns = Array.from(document.querySelectorAll(BTN_SELECTOR));
+  // 4. Fallback global non-typé : proximité verticale avec le header (deep)
+  var allBtns = querySelectorAllDeep(document, BTN_SELECTOR);
   var sectionRect = sectionEl.getBoundingClientRect();
   var candidates = allBtns.filter(isAddBtn);
   if (candidates.length === 0) return null;
