@@ -717,6 +717,92 @@
       Logger.warn("Sections dynamiques : " + dynErr.message);
     }
 
+    // 4bis. Web Components custom <oc-input> (SmartRecruiters/Sopra Steria)
+    // Le <input> réel est noyé dans plusieurs Shadow DOM imbriqués
+    // (oc-input → spl-input → spl-internal-form-field → input). Si l'un de
+    // ces shadows est en mode "closed", querySelectorAllDeepInputs ne peut
+    // pas l'atteindre. On retombe alors sur le light-DOM `formcontrolname`.
+    try {
+      var SOCIAL_OC_MAP = {
+        linkedin: "linkedin",
+        portfolio: "portfolio",
+        facebook: "facebook",
+        twitter: "twitter",
+        x: "twitter",
+        website: "portfolio",
+        personalwebsite: "portfolio",
+        siteweb: "portfolio",
+        site: "portfolio",
+      };
+      var ocInputs = document.querySelectorAll(
+        "oc-input[formcontrolname], oc-input[attrid], oc-input[data-test]"
+      );
+      for (var oc = 0; oc < ocInputs.length; oc++) {
+        var ocEl = ocInputs[oc];
+        var fcn = (
+          ocEl.getAttribute("formcontrolname") ||
+          ocEl.getAttribute("attrid") ||
+          ocEl.getAttribute("data-test") ||
+          ""
+        )
+          .toLowerCase()
+          .replace(/-input$/, "")
+          .replace(/^web-prof[-]?/, "")
+          .replace(/[-_\s]/g, "");
+        var fieldKey = SOCIAL_OC_MAP[fcn];
+        if (!fieldKey) continue;
+
+        var value = getValueForField(fieldKey, profil, coverLetter);
+        if (!value) continue;
+
+        // Stratégie 1 : descendre dans le shadow tree si toutes les ombres sont ouvertes
+        var innerInput = null;
+        try {
+          var sr1 = ocEl.shadowRoot;
+          if (sr1) {
+            var splNode = sr1.querySelector("spl-input, spl-text-input");
+            var sr2 = splNode && splNode.shadowRoot;
+            var ifield = sr2 && sr2.querySelector("spl-internal-form-field, .c-spl-input-wrapper");
+            var sr3 = ifield && ifield.shadowRoot;
+            innerInput =
+              (sr3 && sr3.querySelector("input, textarea")) ||
+              (sr2 && sr2.querySelector("input, textarea")) ||
+              (sr1 && sr1.querySelector("input, textarea"));
+          }
+        } catch (_) {}
+
+        var ok = false;
+        if (innerInput) {
+          try {
+            fillInputField(innerInput, value);
+            ok = true;
+            Logger.log("oc-input rempli via input interne : " + fcn + " = " + value);
+          } catch (_) {}
+        }
+
+        // Stratégie 2 : poser .value sur le custom element host
+        // (Angular Forms écoute souvent le 'input' event sur le host)
+        if (!ok) {
+          try {
+            ocEl.value = value;
+            ocEl.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+            ocEl.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+            ok = true;
+            Logger.log("oc-input rempli via host.value : " + fcn + " = " + value);
+          } catch (e) {
+            Logger.warn("oc-input " + fcn + " : échec host.value (" + e.message + ")");
+          }
+        }
+
+        if (ok) {
+          showFieldFeedback(ocEl);
+          filled++;
+        }
+      }
+    } catch (ocErr) {
+      Logger.warn("Bloc oc-input : " + ocErr.message);
+    }
+
     // 5. Upload fichiers (CV / Lettre de motivation) si disponibles
     var filesFilled = 0;
     if (window.FileUploader) {
