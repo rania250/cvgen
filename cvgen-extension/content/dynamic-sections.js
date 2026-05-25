@@ -46,6 +46,79 @@ function getComposedParent(el) {
 }
 
 /**
+ * Cherche un bouton "Sauvegarder/Enregistrer/OK" dans le container et le
+ * clique. Indispensable sur SmartRecruiters/SR : sans Sauvegarder, le
+ * formulaire ouvert disparaît dès qu'on en ouvre un autre, et seuls les
+ * champs validés en temps réel sont conservés.
+ *
+ * @param {Element} container
+ * @returns {Promise<boolean>} true si un bouton a été cliqué
+ */
+async function clickSaveButton(container) {
+  if (!container) return false;
+  var SAVE_PATTERNS = [
+    "sauvegarder", "enregistrer", "save", "valider", "ok", "confirmer", "submit", "done"
+  ];
+  // Chercher d'abord dans le container, sinon dans les ancêtres composés
+  var BTN_SEL =
+    'button, [role="button"], spl-button, ' +
+    'input[type="submit"], input[type="button"]';
+
+  function findIn(scope) {
+    if (!scope) return null;
+    var btns = querySelectorAllDeep(scope, BTN_SEL);
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      var txt = ((b.innerText || b.textContent || "") + " " +
+                 (b.getAttribute("aria-label") || "") + " " +
+                 (b.value || "")).toLowerCase().trim();
+      for (var p = 0; p < SAVE_PATTERNS.length; p++) {
+        // Exiger word-boundary pour éviter les faux positifs
+        var re = new RegExp("\\b" + SAVE_PATTERNS[p] + "\\b", "i");
+        if (re.test(txt)) return b;
+      }
+    }
+    return null;
+  }
+
+  var saveBtn = findIn(container);
+  // Remonter dans le composed tree si pas trouvé localement
+  if (!saveBtn) {
+    var ancestor = getComposedParent(container);
+    var hops = 0;
+    while (ancestor && hops < 5 && !saveBtn) {
+      saveBtn = findIn(ancestor);
+      ancestor = getComposedParent(ancestor);
+      hops++;
+    }
+  }
+
+  if (!saveBtn) {
+    Logger.log("Pas de bouton Sauvegarder trouvé — l'entrée pourrait ne pas être persistée");
+    return false;
+  }
+
+  Logger.log(
+    "Clic Sauvegarder sur <" + saveBtn.tagName.toLowerCase() +
+    "> texte='" + (saveBtn.innerText || "").substring(0, 30) + "'"
+  );
+  try { saveBtn.focus(); } catch (_) {}
+  try {
+    if (typeof saveBtn.click === "function") {
+      saveBtn.click();
+    } else {
+      saveBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    }
+  } catch (err) {
+    Logger.warn("Échec clic Sauvegarder : " + err.message);
+    return false;
+  }
+  // Attendre que SR ferme le formulaire / persiste l'entrée
+  await new Promise(function (r) { setTimeout(r, 600); });
+  return true;
+}
+
+/**
  * Équivalent de Element.contains() qui traverse les shadow roots.
  */
 function composedContains(ancestor, target) {
@@ -335,16 +408,40 @@ var FORMATION_SUBFIELDS = {
     "année de fin",
     "graduation year",
     "year of graduation",
-    "end date",
     "completion year",
     "completion date",
+  ],
+  date_debut: [
+    "date de début",
+    "date debut",
+    "début",
+    "du",
+    "depuis",
+    "start date",
+    "from",
+    "starting",
+  ],
+  date_fin: [
+    "date de fin",
+    "date fin",
+    "fin",
+    "à",
+    "jusqu a",
+    "jusqu à",
+    "end date",
+    "to",
+    "until",
   ],
   domaine: [
     "domaine",
     "domaine d etude",
     "domaine d'etude",
+    "specialisation",
+    "spécialisation",
     "spécialité",
+    "specialite",
     "filière",
+    "filiere",
     "mention",
     "matière principale",
     "field of study",
@@ -352,6 +449,14 @@ var FORMATION_SUBFIELDS = {
     "subject",
     "discipline",
     "specialization",
+  ],
+  lieu: [
+    "emplacement de l ecole",
+    "emplacement de l école",
+    "ville",
+    "lieu",
+    "school location",
+    "school city",
   ],
   country_education: [
     "country of education",
@@ -1649,6 +1754,8 @@ async function fillExperienceSections(profil) {
 
     var filled = await fillSubfields(container, EXPERIENCE_SUBFIELDS, values);
     Logger.log("Expérience #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
+    // Cliquer Sauvegarder pour persister l'entrée (SmartRecruiters, etc.)
+    await clickSaveButton(container);
     added++;
   }
 
@@ -1966,6 +2073,7 @@ async function fillFormationSections(profil) {
 
     var filled = await fillSubfields(container, FORMATION_SUBFIELDS, values);
     Logger.log("Formation #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
+    await clickSaveButton(container);
     added++;
   }
 
@@ -2049,6 +2157,7 @@ async function fillCertificationSections(profil) {
 
     var filled = await fillSubfields(container, CERTIFICATION_SUBFIELDS, values);
     Logger.log("Certification #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
+    await clickSaveButton(container);
     added++;
   }
 
@@ -2140,6 +2249,7 @@ async function fillLangueSections(profil) {
 
     var filled = await fillSubfields(container, LANGUE_SUBFIELDS, values);
     Logger.log("Langue #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
+    await clickSaveButton(container);
     added++;
   }
 
