@@ -575,6 +575,44 @@ document
     aiShowResult("Envoi annulé. Vérifiez puis cliquez le bouton d'envoi vous-même.", "success");
   });
 
+// --- Téléchargement des documents générés (pour vérifier le contenu) ---
+function base64ToBlob(base64, mime) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime || "application/pdf" });
+}
+
+async function downloadStoredPdf(base64Key, nameKey, fallbackName) {
+  const base64 = await Storage.get(base64Key);
+  if (!base64) {
+    aiShowResult("Aucun document à télécharger. Lancez d'abord l'agent IA.", "error");
+    return;
+  }
+  const name = (await Storage.get(nameKey)) || fallbackName;
+  const blob = base64ToBlob(base64, "application/pdf");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+}
+
+document
+  .getElementById("btn-ai-cv-download")
+  .addEventListener("click", function () {
+    downloadStoredPdf("cvBase64", "cvFileName", "CV.pdf");
+  });
+
+document
+  .getElementById("btn-ai-lm-download")
+  .addEventListener("click", function () {
+    downloadStoredPdf("lmBase64", "lmFileName", "Lettre_motivation.pdf");
+  });
+
 // --- Actualiser le profil ---
 document
   .getElementById("btn-sync")

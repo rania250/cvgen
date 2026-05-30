@@ -231,12 +231,38 @@ async function handleGetUser() {
  *
  * @param {{ offer: { title?: string, company?: string, offerText?: string }, tone?: string }} payload
  */
+function slugify(str) {
+  return (str || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
+function docTimestamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    d.getFullYear() +
+    p(d.getMonth() + 1) +
+    p(d.getDate()) +
+    "_" +
+    p(d.getHours()) +
+    p(d.getMinutes())
+  );
+}
+
 async function handleAiPrepare(payload) {
   const offer = (payload && payload.offer) || {};
   const offerText = (offer.offerText || "").trim();
   const company = offer.company || "";
   const jobTitle = offer.title || "";
   const tone = (payload && payload.tone) || "formel";
+  // Suffixe descriptif (titre/société + horodatage) pour distinguer visuellement
+  // les documents d'une offre à l'autre.
+  const docSlug = slugify(jobTitle || company) || "offre";
+  const docTs = docTimestamp();
 
   if (!offerText || offerText.length < 30) {
     return {
@@ -267,7 +293,7 @@ async function handleAiPrepare(payload) {
         "/api/generation/" + generatedCvId + "/export-pdf",
         { method: "POST", body: JSON.stringify({ templateId: "template1" }) },
       );
-      const cvName = cvPdf.fileName || "CV_CVGen.pdf";
+      const cvName = "CV_" + docSlug + "_" + docTs + ".pdf";
       await Storage.set("cvBase64", cvPdf.base64);
       await Storage.set("cvFileName", cvName);
       result.cvName = cvName;
@@ -300,7 +326,7 @@ async function handleAiPrepare(payload) {
         method: "POST",
         body: JSON.stringify({ content: coverLetterText }),
       });
-      const lmName = clPdf.fileName || "Lettre_Motivation.pdf";
+      const lmName = "Lettre_" + docSlug + "_" + docTs + ".pdf";
       await Storage.set("lmBase64", clPdf.base64);
       await Storage.set("lmFileName", lmName);
       result.lmName = lmName;

@@ -192,8 +192,14 @@
           <div class="ai-preview-head">
             <span id="ai-preview-title">Documents prêts</span>
           </div>
-          <div class="ai-doc-line" id="ai-cv-line" style="display:none">📄 <span id="ai-cv-name"></span></div>
-          <div class="ai-doc-line" id="ai-lm-line" style="display:none">💌 <span id="ai-lm-name"></span></div>
+          <div class="ai-doc-line" id="ai-cv-line" style="display:none">
+            📄 <span id="ai-cv-name"></span>
+            <button id="btn-ai-cv-download" class="btn btn-secondary btn-sm" type="button">⬇ Télécharger</button>
+          </div>
+          <div class="ai-doc-line" id="ai-lm-line" style="display:none">
+            💌 <span id="ai-lm-name"></span>
+            <button id="btn-ai-lm-download" class="btn btn-secondary btn-sm" type="button">⬇ Télécharger</button>
+          </div>
           <details class="ai-letter-details" id="ai-letter-details" style="display:none">
             <summary>Voir la lettre générée</summary>
             <textarea id="ai-letter-text" class="ai-letter-text" rows="8"></textarea>
