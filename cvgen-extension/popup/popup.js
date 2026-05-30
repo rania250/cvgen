@@ -452,9 +452,30 @@ document
         throw new Error("Impossible de lire l'offre sur cette page.");
       }
       const offer = offerResp.offer || {};
+
+      // Enrichissement : sur SmartRecruiters, la page de candidature ne contient
+      // que le titre. On va chercher la description COMPLÈTE via l'API publique
+      // (sinon le CV/lettre seraient génériques et identiques d'une offre à l'autre).
+      try {
+        const tabForUrl = await getActiveTab();
+        const sr = parseSmartRecruiters(tabForUrl && tabForUrl.url);
+        if (sr) {
+          const posting = await sendToServiceWorker({
+            type: "FETCH_SR_POSTING",
+            payload: sr,
+          });
+          if (posting && posting.success && (posting.offerText || "").length > 50) {
+            offer.title = posting.title || offer.title;
+            offer.company = posting.company || offer.company;
+            offer.offerText = posting.offerText;
+            Logger.log("Offre enrichie via API SmartRecruiters (" + posting.offerText.length + " car.)");
+          }
+        }
+      } catch (e) {
+        Logger.warn("Enrichissement offre SR échoué: " + (e && e.message));
+      }
+
       // Texte d'offre effectif = titre + entreprise + description trouvée.
-      // Permet de fonctionner même sur une page de formulaire (peu de texte)
-      // tant qu'on a au moins un intitulé de poste.
       const effectiveText = [offer.title, offer.company, offer.offerText]
         .filter(Boolean)
         .join("\n")
@@ -467,35 +488,49 @@ document
       offer.offerText = effectiveText;
       aiSetStep("offer", "done");
 
-      // 2+3. Génération CV + lettre (backend Gemini)
+      // 2+3. Génération CV + lettre (backend Gemini). Si ça échoue (quota, etc.),
+      // on continue quand même jusqu'au remplissage du formulaire.
       aiSetStep("cv", "active");
-      const prep = await sendToServiceWorker({
-        type: "AI_PREPARE",
-        payload: { offer: offer, tone: "formel" },
-      });
-      if (!prep || !prep.success) {
-        throw new Error(prep && prep.error ? prep.error : "Échec de génération IA.");
-      }
-      aiSetStep("cv", "done");
-      aiSetStep("cover", "done");
+      let genOk = false;
+      let genError = "";
+      try {
+        const prep = await sendToServiceWorker({
+          type: "AI_PREPARE",
+          payload: { offer: offer, tone: "formel" },
+        });
+        if (prep && prep.success) {
+          genOk = true;
+          aiSetStep("cv", "done");
+          aiSetStep("cover", "done");
 
-      // Aperçu documents
-      preview.style.display = "block";
-      await refreshDocStatus();
-      if (prep.cvName) {
-        document.getElementById("ai-cv-line").style.display = "block";
-        document.getElementById("ai-cv-name").textContent = prep.cvName;
+          preview.style.display = "block";
+          await refreshDocStatus();
+          if (prep.cvName) {
+            document.getElementById("ai-cv-line").style.display = "block";
+            document.getElementById("ai-cv-name").textContent = prep.cvName;
+          }
+          if (prep.lmName) {
+            document.getElementById("ai-lm-line").style.display = "block";
+            document.getElementById("ai-lm-name").textContent = prep.lmName;
+          }
+          if (prep.coverLetterText) {
+            document.getElementById("ai-letter-details").style.display = "block";
+            document.getElementById("ai-letter-text").value = prep.coverLetterText;
+          }
+        } else {
+          genError = (prep && prep.error) || "Échec de génération IA.";
+        }
+      } catch (e) {
+        genError = e.message || "Échec de génération IA.";
       }
-      if (prep.lmName) {
-        document.getElementById("ai-lm-line").style.display = "block";
-        document.getElementById("ai-lm-name").textContent = prep.lmName;
-      }
-      if (prep.coverLetterText) {
-        document.getElementById("ai-letter-details").style.display = "block";
-        document.getElementById("ai-letter-text").value = prep.coverLetterText;
+      if (!genOk) {
+        aiSetStep("cv", "pending");
+        aiSetStep("cover", "pending");
+        Logger.warn("Génération IA échouée, on remplit quand même : " + genError);
       }
 
-      // 4. Remplissage du formulaire (réutilise FILL_FORM, overwrite activé)
+      // 4. Remplissage du formulaire (réutilise FILL_FORM, overwrite activé).
+      // Effectué MÊME si la génération a échoué (les champs ne dépendent pas du CV).
       aiSetStep("fill", "active");
       const fillResp = await sendToContentScript({
         type: "FILL_FORM",
@@ -504,10 +539,18 @@ document
       aiSetStep("fill", "done");
 
       const filledN = fillResp && fillResp.success ? fillResp.filled : 0;
-      aiShowResult(
-        "Documents générés et " + filledN + " champ(s) rempli(s). Vérifiez puis envoyez.",
-        "success",
-      );
+      if (genOk) {
+        aiShowResult(
+          "Documents générés et " + filledN + " champ(s) rempli(s). Vérifiez puis envoyez.",
+          "success",
+        );
+      } else {
+        aiShowResult(
+          filledN + " champ(s) rempli(s). ⚠ Génération du CV/lettre indisponible (" +
+            genError + ") — formulaire rempli avec vos infos.",
+          "error",
+        );
+      }
 
       // 5. Détecter le bouton d'envoi et proposer la confirmation
       try {
@@ -767,6 +810,22 @@ chrome.runtime.onMessage.addListener(function (message) {
 });
 
 // ─── Helpers communication ────────────────────────────────────────────────────
+
+/**
+ * Extrait companyId + postingId d'une URL SmartRecruiters pour interroger
+ * l'API publique. Gère les formats oneclick-ui et jobs classiques.
+ * Ex: .../company/SopraSteria1/publication/a6c5af4e-... → { companyId, postingId }
+ */
+function parseSmartRecruiters(url) {
+  if (!url || url.indexOf("smartrecruiters.com") === -1) return null;
+  // .../company/<companyId>/publication/<postingId>
+  let m = url.match(/company\/([^/]+)\/(?:publication|jobs)\/([0-9a-fA-F-]{16,})/);
+  if (m) return { companyId: m[1], postingId: m[2] };
+  // jobs.smartrecruiters.com/<companyId>/<postingId-slug>
+  m = url.match(/smartrecruiters\.com\/([^/?#]+)\/(\d{6,})/);
+  if (m) return { companyId: m[1], postingId: m[2] };
+  return null;
+}
 
 function sendToServiceWorker(message) {
   return new Promise(function (resolve, reject) {

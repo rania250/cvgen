@@ -66,6 +66,9 @@ async function handleMessage(message, sender) {
     case "FILL_CLOSED_SHADOW":
       return handleFillClosedShadow(message.payload, sender);
 
+    case "FETCH_SR_POSTING":
+      return handleFetchSrPosting(message.payload);
+
     default:
       Logger.warn("Type de message inconnu: " + message.type);
       return {
@@ -76,6 +79,78 @@ async function handleMessage(message, sender) {
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
+
+/**
+ * Convertit un fragment HTML en texte brut (pas de DOM dans le service worker).
+ */
+function htmlToText(html) {
+  if (!html) return "";
+  return html
+    .replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6])\s*>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;|&rsquo;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Récupère la description complète d'une offre SmartRecruiters via l'API
+ * publique (la page de candidature ne contient que le titre).
+ * payload : { companyId, postingId }
+ */
+async function handleFetchSrPosting(payload) {
+  const companyId = payload && payload.companyId;
+  const postingId = payload && payload.postingId;
+  if (!companyId || !postingId) {
+    return { success: false, error: "Identifiants SmartRecruiters manquants." };
+  }
+  const url =
+    "https://api.smartrecruiters.com/v1/companies/" +
+    encodeURIComponent(companyId) +
+    "/postings/" +
+    encodeURIComponent(postingId);
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      return { success: false, error: "API SmartRecruiters HTTP " + resp.status };
+    }
+    const data = await resp.json();
+    const sections = (data.jobAd && data.jobAd.sections) || {};
+    const parts = [];
+    ["companyDescription", "jobDescription", "qualifications", "additionalInformation"].forEach(
+      function (key) {
+        const sec = sections[key];
+        if (sec && sec.text) {
+          const t = htmlToText(sec.text);
+          if (t) parts.push((sec.title ? sec.title + "\n" : "") + t);
+        }
+      },
+    );
+    const offerText = parts.join("\n\n");
+    const company =
+      (data.company && data.company.name) ||
+      (data.creator && data.creator.name) ||
+      companyId;
+    Logger.log("Offre SmartRecruiters récupérée (" + offerText.length + " caractères).");
+    return {
+      success: true,
+      title: data.name || "",
+      company: company,
+      location: data.location ? [data.location.city, data.location.country].filter(Boolean).join(", ") : "",
+      offerText: offerText,
+    };
+  } catch (err) {
+    Logger.warn("Échec récupération offre SmartRecruiters : " + err.message);
+    return { success: false, error: err.message };
+  }
+}
 
 /**
  * Remplit les champs verrouillés dans un Shadow DOM "closed" (ex. SmartRecruiters)
