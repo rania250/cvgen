@@ -106,8 +106,9 @@ public class GeminiClient {
                 }
                 throw new ResponseStatusException(
                         HttpStatus.TOO_MANY_REQUESTS,
-                        "Quota de l'IA atteint (limite gratuite Gemini : 20 requêtes/jour). "
-                                + "Réessayez dans quelques minutes, demain, ou utilisez une autre clé API.");
+                        "Quota de l'IA atteint (limite gratuite Gemini dépassée). "
+                                + "Réessayez dans quelques minutes, demain (réinitialisation à minuit heure Pacifique), "
+                                + "ou utilisez une clé API d'un nouveau projet Google.");
 
             } catch (HttpClientErrorException ex) {
                 // 400/401/403… : clé invalide, clé signalée comme fuitée, etc.
