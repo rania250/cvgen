@@ -848,7 +848,9 @@
       }
 
       if (ocClosedFields.length > 0) {
-        fillClosedShadowViaCDP(ocClosedFields, manualOcFields);
+        // On attend la fin du remplissage CDP (multi-passes) pour que les
+        // champs perso soient stabilisés avant que l'agent ne propose l'envoi.
+        await fillClosedShadowViaCDP(ocClosedFields, manualOcFields);
       } else if (manualOcFields.length > 0) {
         showManualFieldsBanner(manualOcFields);
       }
@@ -980,65 +982,76 @@
    * manualFields : champs déjà classés "manuel" (sans formcontrolname)
    */
   function fillClosedShadowViaCDP(closedFields, manualFields) {
-    var fallbackToManual = function (err) {
-      var manual = (manualFields || []).slice();
-      closedFields.forEach(function (f) {
-        manual.push({ label: f.label, value: f.value });
-        highlightManualField(f.el);
+    return new Promise(function (resolve) {
+      var done = false;
+      var finish = function () {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+
+      var fallbackToManual = function (err) {
+        var manual = (manualFields || []).slice();
+        closedFields.forEach(function (f) {
+          manual.push({ label: f.label, value: f.value });
+          highlightManualField(f.el);
+        });
+        if (err) Logger.warn("CDP indisponible : " + err + " → saisie manuelle");
+        if (manual.length > 0) showManualFieldsBanner(manual);
+        finish();
+      };
+
+      var payloadFields = closedFields.map(function (f) {
+        return { formcontrolname: f.formcontrolname, value: f.value };
       });
-      if (err) Logger.warn("CDP indisponible : " + err + " → saisie manuelle");
-      if (manual.length > 0) showManualFieldsBanner(manual);
-    };
 
-    var payloadFields = closedFields.map(function (f) {
-      return { formcontrolname: f.formcontrolname, value: f.value };
-    });
+      Logger.log("Tentative CDP pour " + payloadFields.length + " champ(s) shadow fermé…");
 
-    Logger.log("Tentative CDP pour " + payloadFields.length + " champ(s) shadow fermé…");
-
-    try {
-      chrome.runtime.sendMessage(
-        { type: "FILL_CLOSED_SHADOW", payload: { fields: payloadFields } },
-        function (resp) {
-          if (chrome.runtime.lastError) {
-            fallbackToManual(chrome.runtime.lastError.message);
-            return;
-          }
-          if (resp && resp.details) {
-            resp.details.forEach(function (d) {
-              Logger.log("CDP détail — " + d);
-            });
-          }
-
-          if (!resp || !resp.success) {
-            fallbackToManual(resp && resp.error);
-            return;
-          }
-
-          var failedSet = {};
-          (resp.failed || []).forEach(function (n) {
-            failedSet[n] = true;
-          });
-
-          var manual = (manualFields || []).slice();
-          closedFields.forEach(function (f) {
-            if (failedSet[f.formcontrolname]) {
-              manual.push({ label: f.label, value: f.value });
-              highlightManualField(f.el);
-            } else {
-              try {
-                showFieldFeedback(f.el);
-              } catch (_) {}
-              Logger.log("oc-input rempli via CDP : " + f.formcontrolname + " = " + f.value);
+      try {
+        chrome.runtime.sendMessage(
+          { type: "FILL_CLOSED_SHADOW", payload: { fields: payloadFields } },
+          function (resp) {
+            if (chrome.runtime.lastError) {
+              fallbackToManual(chrome.runtime.lastError.message);
+              return;
             }
-          });
+            if (resp && resp.details) {
+              resp.details.forEach(function (d) {
+                Logger.log("CDP détail — " + d);
+              });
+            }
 
-          if (manual.length > 0) showManualFieldsBanner(manual);
-        }
-      );
-    } catch (e) {
-      fallbackToManual(e && e.message);
-    }
+            if (!resp || !resp.success) {
+              fallbackToManual(resp && resp.error);
+              return;
+            }
+
+            var failedSet = {};
+            (resp.failed || []).forEach(function (n) {
+              failedSet[n] = true;
+            });
+
+            var manual = (manualFields || []).slice();
+            closedFields.forEach(function (f) {
+              if (failedSet[f.formcontrolname]) {
+                manual.push({ label: f.label, value: f.value });
+                highlightManualField(f.el);
+              } else {
+                try {
+                  showFieldFeedback(f.el);
+                } catch (_) {}
+                Logger.log("oc-input rempli via CDP : " + f.formcontrolname + " = " + f.value);
+              }
+            });
+
+            if (manual.length > 0) showManualFieldsBanner(manual);
+            finish();
+          }
+        );
+      } catch (e) {
+        fallbackToManual(e && e.message);
+      }
+    });
   }
 
   /**

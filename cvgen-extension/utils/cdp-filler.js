@@ -204,57 +204,109 @@ var CdpFiller = (function () {
    * fields : [{ formcontrolname, value }]
    * → { success, filled:[noms], failed:[noms], error? }
    */
+  // Lit la valeur courante du vrai input (pour vérifier si Angular l'a vidé).
+  async function readValue(tabId, nodeId) {
+    try {
+      var resolved = await send(tabId, "DOM.resolveNode", { nodeId: nodeId });
+      var objectId = resolved && resolved.object && resolved.object.objectId;
+      if (!objectId) return null;
+      var res = await send(tabId, "Runtime.callFunctionOn", {
+        objectId: objectId,
+        functionDeclaration: "function(){ return this ? this.value : null; }",
+        returnByValue: true,
+      });
+      return res && res.result ? res.result.value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Nombre de passes : Angular peut re-render et vider les champs juste après
+  // le remplissage (validation de formulaire). On re-remplit donc ce qui a été
+  // vidé, sur plusieurs passes espacées, jusqu'à ce que la valeur tienne.
+  var MAX_PASSES = 4;
+  var PASS_DELAY_MS = 1200;
+
   async function fillFields(tabId, fields) {
-    var filled = [];
-    var failed = [];
     var details = [];
     var attached = false;
+    var status = {}; // formcontrolname -> 'filled' | 'failed'
+
     try {
       await attach(tabId);
       attached = true;
       await send(tabId, "DOM.enable", {});
 
-      var doc = await send(tabId, "DOM.getDocument", { depth: -1, pierce: true });
-      var map = {};
-      indexOcInputs(doc.root, map);
+      for (var pass = 1; pass <= MAX_PASSES; pass++) {
+        // Re-scanner l'arbre à chaque passe : si Angular a recréé un input
+        // (re-render), son ancien nodeId est périmé.
+        var doc = await send(tabId, "DOM.getDocument", { depth: -1, pierce: true });
+        var map = {};
+        indexOcInputs(doc.root, map);
 
-      for (var i = 0; i < fields.length; i++) {
-        var f = fields[i];
-        var nodeId = map[f.formcontrolname];
-        if (!nodeId) {
-          failed.push(f.formcontrolname);
-          details.push(f.formcontrolname + " → AUCUN input trouvé dans le composant");
-          continue;
-        }
-        try {
-          var diag = await fillNode(tabId, nodeId, String(f.value));
-          // On considère "rempli" si le vrai input contient bien la valeur.
-          var landed = diag && diag.ok && String(diag.value) === String(f.value);
-          if (landed) {
-            filled.push(f.formcontrolname);
-          } else {
-            failed.push(f.formcontrolname);
+        var stillNeedWork = false;
+
+        for (var i = 0; i < fields.length; i++) {
+          var f = fields[i];
+          var nodeId = map[f.formcontrolname];
+          if (!nodeId) {
+            status[f.formcontrolname] = "failed";
+            if (pass === 1) {
+              details.push(f.formcontrolname + " → AUCUN input trouvé dans le composant");
+            }
+            continue;
           }
-          details.push(
-            f.formcontrolname +
-              " → " +
-              (diag && diag.ok
-                ? "input<" + diag.tag + " type=" + diag.type + " name='" + diag.name + "'" +
-                  " visible=" + diag.visible + " ro=" + diag.readOnly + " dis=" + diag.disabled + ">" +
-                  " valeur=" + JSON.stringify(diag.value)
-                : "ECHEC " + (diag && diag.error)),
-          );
-        } catch (e) {
-          failed.push(f.formcontrolname);
-          details.push(f.formcontrolname + " → exception " + (e && e.message));
+
+          // Si la valeur tient déjà, rien à faire pour ce champ cette passe.
+          var current = await readValue(tabId, nodeId);
+          if (String(current) === String(f.value)) {
+            status[f.formcontrolname] = "filled";
+            continue;
+          }
+
+          try {
+            var diag = await fillNode(tabId, nodeId, String(f.value));
+            var landed = diag && diag.ok && String(diag.value) === String(f.value);
+            status[f.formcontrolname] = landed ? "filled" : "failed";
+            if (!landed) stillNeedWork = true;
+            if (pass === 1) {
+              details.push(
+                f.formcontrolname +
+                  " → " +
+                  (diag && diag.ok
+                    ? "input<" + diag.tag + " type=" + diag.type + " name='" + diag.name + "'" +
+                      " visible=" + diag.visible + " ro=" + diag.readOnly + " dis=" + diag.disabled + ">" +
+                      " valeur=" + JSON.stringify(diag.value)
+                    : "ECHEC " + (diag && diag.error)),
+              );
+            }
+          } catch (e) {
+            status[f.formcontrolname] = "failed";
+            stillNeedWork = true;
+            if (pass === 1) {
+              details.push(f.formcontrolname + " → exception " + (e && e.message));
+            }
+          }
         }
+
+        // On laisse Angular « digérer » puis on revérifie à la passe suivante,
+        // même si tout semble rempli (un re-render tardif peut encore vider).
+        if (pass < MAX_PASSES) await sleep(PASS_DELAY_MS);
+        // (on ne sort jamais en avance : on veut survivre aux re-renders tardifs)
+        void stillNeedWork;
       }
+
+      var filled = [];
+      var failed = [];
+      fields.forEach(function (f) {
+        (status[f.formcontrolname] === "filled" ? filled : failed).push(f.formcontrolname);
+      });
       return { success: true, filled: filled, failed: failed, details: details };
     } catch (err) {
       return {
         success: false,
         error: err.message,
-        filled: filled,
+        filled: [],
         failed: fields.map(function (f) {
           return f.formcontrolname;
         }),
