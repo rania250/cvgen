@@ -1,5 +1,5 @@
-# Variables d'environnement
-
+# Variables d'environnement (NE JAMAIS committer : contient les clés API)
+.env
 .env.local
 .env.*.local
 
