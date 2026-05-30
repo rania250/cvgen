@@ -9,6 +9,7 @@ import com.cvgen.backend.profile.api.dto.SkillDto;
 import com.cvgen.backend.profile.api.dto.UserProfileDto;
 import com.cvgen.backend.profile.application.ProfileService;
 import com.cvgen.backend.shared.exception.ResourceNotFoundException;
+import com.cvgen.backend.shared.util.LenientJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +34,7 @@ public class CoverLetterService {
     private final ProfileService profileService;
     private final UserJpaRepository userRepository;
     private final GeminiClient geminiClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = LenientJson.mapper();
 
     /**
      * Génère une lettre de motivation pour l'utilisateur donné et l'offre fournie.
@@ -123,11 +124,7 @@ public class CoverLetterService {
     }
 
     private String parseLetter(String raw) {
-        String json = raw == null ? "" : raw.trim();
-        if (json.startsWith("```json")) json = json.substring(7);
-        if (json.startsWith("```")) json = json.substring(3);
-        if (json.endsWith("```")) json = json.substring(0, json.length() - 3);
-        json = json.trim();
+        String json = LenientJson.strip(raw);
 
         try {
             JsonNode node = objectMapper.readTree(json);

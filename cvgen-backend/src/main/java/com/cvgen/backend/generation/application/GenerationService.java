@@ -7,10 +7,9 @@ import com.cvgen.backend.generation.infrastructure.persistence.GeneratedCvReposi
 import com.cvgen.backend.generation.infrastructure.persistence.entity.GeneratedCvEntity;
 import com.cvgen.backend.profile.api.dto.*;
 import com.cvgen.backend.profile.application.ProfileService;
+import com.cvgen.backend.shared.util.LenientJson;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,9 +35,7 @@ public class GenerationService {
     private final UserJpaRepository userRepository;
     private final GeminiClient geminiClient;
 
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private final ObjectMapper objectMapper = LenientJson.mapper();
 
     /**
      * Génère un CV optimisé pour une offre d'emploi.

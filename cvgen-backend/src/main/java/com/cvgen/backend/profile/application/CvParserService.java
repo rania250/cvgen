@@ -13,7 +13,7 @@ import com.cvgen.backend.profile.infrastructure.persistence.entity.LanguageLevel
 import com.cvgen.backend.profile.infrastructure.persistence.entity.SkillLevel;
 import com.cvgen.backend.shared.config.GeminiProperties;
 import com.cvgen.backend.shared.exception.FileProcessingException;
-import com.fasterxml.jackson.core.JsonParser;
+import com.cvgen.backend.shared.util.LenientJson;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,8 +45,7 @@ public class CvParserService {
 
     private final GeminiClient geminiClient;
     private final GeminiProperties geminiProperties;
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+    private final ObjectMapper objectMapper = LenientJson.mapper();
 
     /**
      * Parse un texte brut de CV via Gemini et retourne un DTO structuré.

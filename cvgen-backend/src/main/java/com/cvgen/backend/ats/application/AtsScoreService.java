@@ -2,6 +2,7 @@ package com.cvgen.backend.ats.application;
 
 import com.cvgen.backend.ats.api.dto.AtsScoreDto;
 import com.cvgen.backend.generation.infrastructure.gemini.GeminiClient;
+import com.cvgen.backend.shared.util.LenientJson;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,7 +20,7 @@ import java.util.List;
 public class AtsScoreService {
 
     private final GeminiClient geminiClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = LenientJson.mapper();
 
     public AtsScoreDto analyzeAts(String cvText, String offerText) {
         String prompt = buildPrompt(cvText, offerText);
@@ -72,16 +73,7 @@ public class AtsScoreService {
     }
 
     private static String cleanJson(String geminiText) {
-        String json = geminiText.trim();
-        if (json.startsWith("```json")) {
-            json = json.substring(7);
-        } else if (json.startsWith("```")) {
-            json = json.substring(3);
-        }
-        if (json.endsWith("```")) {
-            json = json.substring(0, json.length() - 3);
-        }
-        return json.trim();
+        return LenientJson.strip(geminiText);
     }
 
     private List<String> readStringList(JsonNode root, String field) {
