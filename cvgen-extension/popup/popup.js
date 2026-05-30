@@ -170,12 +170,17 @@ async function refreshDetectedFields() {
 
     if (!response || !response.success || !response.fields) {
       setFieldsList([], countEl, listEl);
-      fillBtn.disabled = true;
+      // Le content script a répondu mais sans champs visibles : certains sites
+      // verrouillent leurs champs (Shadow DOM fermé) et restent remplissables
+      // via CDP. On laisse donc l'utilisateur tenter le remplissage.
+      fillBtn.disabled = false;
       return;
     }
 
     setFieldsList(response.fields, countEl, listEl);
-    fillBtn.disabled = response.fields.length === 0;
+    // On n'empêche jamais le clic : même avec 0 champ "visible", il peut y avoir
+    // des champs scellés (oc-input) que seul le CDP sait remplir.
+    fillBtn.disabled = false;
   } catch (_) {
     // Content script non injecté sur cette page (chrome://, about:…, ou iframe bloqué)
     setFieldsList([], countEl, listEl);
