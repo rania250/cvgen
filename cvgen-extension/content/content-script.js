@@ -740,24 +740,45 @@
 
     // 4bis. Web Components custom <oc-input> (SmartRecruiters/Sopra Steria)
     // Le <input> réel est noyé dans plusieurs Shadow DOM imbriqués
-    // (oc-input → spl-input → spl-internal-form-field → input). Si l'un de
-    // ces shadows est en mode "closed", querySelectorAllDeepInputs ne peut
-    // pas l'atteindre. On retombe alors sur le light-DOM `formcontrolname`.
+    // (oc-input → spl-input → spl-internal-form-field → input).
+    //
+    // - Shadow DOM OUVERT  → on atteint le vrai <input> et on le remplit.
+    // - Shadow DOM FERMÉ   → impossible techniquement (input scellé). On
+    //   n'écrit PAS de valeur fantôme sur le host (Angular l'ignore et ça
+    //   affiche de fausses données). À la place on surligne le champ et on
+    //   liste la valeur à recopier manuellement.
     try {
-      var SOCIAL_OC_MAP = {
-        linkedin: "linkedin",
-        portfolio: "portfolio",
-        facebook: "facebook",
-        twitter: "twitter",
-        x: "twitter",
-        website: "portfolio",
-        personalwebsite: "portfolio",
-        siteweb: "portfolio",
-        site: "portfolio",
+      // fcn normalisé → { key: clé profil, label: libellé lisible }
+      var OC_MAP = {
+        firstname: { key: "prenom", label: "Prénom" },
+        prenom: { key: "prenom", label: "Prénom" },
+        lastname: { key: "nom", label: "Nom" },
+        nom: { key: "nom", label: "Nom" },
+        email: { key: "email", label: "E-mail" },
+        emailconfirmation: { key: "email", label: "Confirmation e-mail" },
+        confirmemail: { key: "email", label: "Confirmation e-mail" },
+        phone: { key: "telephone", label: "Téléphone" },
+        telephone: { key: "telephone", label: "Téléphone" },
+        mobile: { key: "telephone", label: "Téléphone" },
+        city: { key: "ville", label: "Ville" },
+        ville: { key: "ville", label: "Ville" },
+        linkedin: { key: "linkedin", label: "LinkedIn" },
+        facebook: { key: "facebook", label: "Facebook" },
+        twitter: { key: "twitter", label: "Twitter / X" },
+        x: { key: "twitter", label: "Twitter / X" },
+        website: { key: "portfolio", label: "Site web" },
+        personalwebsite: { key: "portfolio", label: "Site web" },
+        siteweb: { key: "portfolio", label: "Site web" },
+        site: { key: "portfolio", label: "Site web" },
+        portfolio: { key: "portfolio", label: "Portfolio" },
       };
-      var ocInputs = document.querySelectorAll(
-        "oc-input[formcontrolname], oc-input[attrid], oc-input[data-test]"
-      );
+
+      var ocInputs =
+        typeof querySelectorAllDeep === "function"
+          ? querySelectorAllDeep(document, "oc-input")
+          : document.querySelectorAll("oc-input");
+      var manualOcFields = [];
+
       for (var oc = 0; oc < ocInputs.length; oc++) {
         var ocEl = ocInputs[oc];
         var fcn = (
@@ -770,20 +791,21 @@
           .replace(/-input$/, "")
           .replace(/^web-prof[-]?/, "")
           .replace(/[-_\s]/g, "");
-        var fieldKey = SOCIAL_OC_MAP[fcn];
-        if (!fieldKey) continue;
+        var mapping = OC_MAP[fcn];
+        if (!mapping) continue;
 
-        var value = getValueForField(fieldKey, profil, coverLetter);
+        var value = getValueForField(mapping.key, profil, coverLetter);
         if (!value) continue;
 
-        // Stratégie 1 : descendre dans le shadow tree si toutes les ombres sont ouvertes
+        // Stratégie unique fiable : descendre dans le shadow tree SI ouvert
         var innerInput = null;
         try {
           var sr1 = ocEl.shadowRoot;
           if (sr1) {
             var splNode = sr1.querySelector("spl-input, spl-text-input");
             var sr2 = splNode && splNode.shadowRoot;
-            var ifield = sr2 && sr2.querySelector("spl-internal-form-field, .c-spl-input-wrapper");
+            var ifield =
+              sr2 && sr2.querySelector("spl-internal-form-field, .c-spl-input-wrapper");
             var sr3 = ifield && ifield.shadowRoot;
             innerInput =
               (sr3 && sr3.querySelector("input, textarea")) ||
@@ -792,33 +814,25 @@
           }
         } catch (_) {}
 
-        var ok = false;
         if (innerInput) {
           try {
             fillInputField(innerInput, value);
-            ok = true;
-            Logger.log("oc-input rempli via input interne : " + fcn + " = " + value);
+            showFieldFeedback(ocEl);
+            filled++;
+            Logger.log("oc-input rempli (shadow ouvert) : " + fcn + " = " + value);
           } catch (_) {}
+        } else {
+          // Shadow fermé → non remplissable : on surligne et on note la valeur
+          manualOcFields.push({ label: mapping.label, value: value });
+          highlightManualField(ocEl);
+          Logger.warn(
+            "oc-input '" + fcn + "' : Shadow DOM fermé → à remplir manuellement (" + mapping.label + ")"
+          );
         }
+      }
 
-        // Stratégie 2 : poser .value sur le custom element host
-        // (Angular Forms écoute souvent le 'input' event sur le host)
-        if (!ok) {
-          try {
-            ocEl.value = value;
-            ocEl.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-            ocEl.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-            ok = true;
-            Logger.log("oc-input rempli via host.value : " + fcn + " = " + value);
-          } catch (e) {
-            Logger.warn("oc-input " + fcn + " : échec host.value (" + e.message + ")");
-          }
-        }
-
-        if (ok) {
-          showFieldFeedback(ocEl);
-          filled++;
-        }
+      if (manualOcFields.length > 0) {
+        showManualFieldsBanner(manualOcFields);
       }
     } catch (ocErr) {
       Logger.warn("Bloc oc-input : " + ocErr.message);
@@ -920,6 +934,92 @@
       total: visibleInputs.length,
       skipped: skipped,
     };
+  }
+
+  // ─── Champs non remplissables (Web Components à Shadow DOM fermé) ──────────
+
+  /**
+   * Surligne en orange un champ que l'extension ne peut pas remplir
+   * (ex. <oc-input> Sopra Steria à Shadow DOM fermé), pour signaler à
+   * l'utilisateur qu'il doit le saisir à la main.
+   */
+  function highlightManualField(el) {
+    try {
+      el.style.outline = "2px dashed #f59e0b";
+      el.style.outlineOffset = "2px";
+      el.style.borderRadius = "4px";
+      el.setAttribute("title", "CVGen : champ verrouillé par le site, à remplir à la main");
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    } catch (_) {}
+  }
+
+  /**
+   * Affiche un bandeau récapitulant les champs à recopier manuellement,
+   * avec un bouton « Copier » par valeur. Reste 25 s puis disparaît.
+   */
+  function showManualFieldsBanner(fields) {
+    try {
+      var existing = document.getElementById("cvgen-manual-banner");
+      if (existing) existing.remove();
+
+      var box = document.createElement("div");
+      box.id = "cvgen-manual-banner";
+      box.style.cssText =
+        "position:fixed;bottom:16px;right:16px;z-index:2147483647;max-width:340px;" +
+        "background:#1b2a4a;color:#f1f5f9;border:1px solid #f59e0b;border-radius:10px;" +
+        "box-shadow:0 8px 30px rgba(0,0,0,.4);font-family:system-ui,sans-serif;font-size:13px;" +
+        "padding:12px 14px;line-height:1.45;";
+
+      var title = document.createElement("div");
+      title.style.cssText = "font-weight:700;margin-bottom:8px;color:#f59e0b;";
+      title.textContent = "⚠ " + fields.length + " champ(s) à remplir à la main";
+      box.appendChild(title);
+
+      var note = document.createElement("div");
+      note.style.cssText = "color:#94a3b8;margin-bottom:8px;font-size:11px;";
+      note.textContent =
+        "Ce site verrouille ces champs (Web Components). Clique « Copier » puis colle (Ctrl+V) dans le champ surligné.";
+      box.appendChild(note);
+
+      fields.forEach(function (f) {
+        var row = document.createElement("div");
+        row.style.cssText =
+          "display:flex;align-items:center;gap:8px;margin:4px 0;";
+
+        var label = document.createElement("span");
+        label.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+        label.textContent = f.label + " : " + f.value;
+        row.appendChild(label);
+
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Copier";
+        btn.style.cssText =
+          "flex:0 0 auto;border:none;background:#3b82f6;color:#fff;border-radius:5px;" +
+          "padding:3px 8px;font-size:11px;cursor:pointer;";
+        btn.addEventListener("click", function () {
+          try {
+            navigator.clipboard.writeText(f.value);
+            btn.textContent = "Copié ✓";
+            setTimeout(function () { btn.textContent = "Copier"; }, 1500);
+          } catch (_) {}
+        });
+        row.appendChild(btn);
+        box.appendChild(row);
+      });
+
+      var close = document.createElement("button");
+      close.type = "button";
+      close.textContent = "Fermer";
+      close.style.cssText =
+        "margin-top:8px;width:100%;border:1px solid #334a70;background:transparent;" +
+        "color:#94a3b8;border-radius:5px;padding:4px;font-size:11px;cursor:pointer;";
+      close.addEventListener("click", function () { box.remove(); });
+      box.appendChild(close);
+
+      document.body.appendChild(box);
+      setTimeout(function () { if (box.parentNode) box.remove(); }, 25000);
+    } catch (_) {}
   }
 
   // ─── Ouverture des accordéons de profil (SuccessFactors, etc.) ────────────
