@@ -101,6 +101,9 @@ async function handleFillClosedShadow(payload, sender) {
       " échec(s)" +
       (result.error ? " (" + result.error + ")" : ""),
   );
+  (result.details || []).forEach(function (d) {
+    Logger.log("CDP détail — " + d);
+  });
   return result;
 }
 

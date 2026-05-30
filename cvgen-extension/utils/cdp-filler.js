@@ -70,13 +70,19 @@ var CdpFiller = (function () {
   }
 
   /**
-   * Cherche récursivement le premier <input>/<textarea> dans un sous-arbre,
-   * en traversant les enfants, les shadow roots (même fermés) et les iframes.
+   * Cherche récursivement le premier <input>/<textarea> "remplissable" dans un
+   * sous-arbre (on ignore les input type=hidden et les boutons), en traversant
+   * les enfants, les shadow roots (même fermés) et les iframes.
    */
   function findInnerControl(node) {
     if (!node) return null;
     var ln = (node.localName || node.nodeName || "").toLowerCase();
-    if (ln === "input" || ln === "textarea") return node;
+    if (ln === "textarea") return node;
+    if (ln === "input") {
+      var type = (getAttr(node, "type") || "text").toLowerCase();
+      var skip = { hidden: 1, button: 1, submit: 1, checkbox: 1, radio: 1, file: 1, image: 1, reset: 1 };
+      if (!skip[type]) return node;
+    }
 
     var i, found;
     if (node.shadowRoots) {
@@ -125,25 +131,73 @@ var CdpFiller = (function () {
     if (root.contentDocument) indexOcInputs(root.contentDocument, map);
   }
 
-  async function typeInto(tabId, nodeId, value) {
-    await send(tabId, "DOM.focus", { nodeId: nodeId });
-    // Tout sélectionner (Ctrl+A, modifiers:2) pour écraser une éventuelle valeur
-    // existante (ex. autofill "France"), puis insérer le texte.
-    await send(tabId, "Input.dispatchKeyEvent", {
-      type: "keyDown",
-      modifiers: 2,
-      key: "a",
-      code: "KeyA",
-      windowsVirtualKeyCode: 65,
+  // Fonction exécutée DANS la page, avec `this` = le vrai <input> (même dans un
+  // shadow fermé, grâce à DOM.resolveNode → Runtime.callFunctionOn).
+  // 1) frappe "trusted" via Input.insertText (gérée en amont) — ici on complète
+  //    avec le setter natif + événements composés (composed:true) pour franchir
+  //    les frontières shadow et notifier Angular, et on renvoie un diagnostic.
+  var FILL_FN = function (v) {
+    try {
+      var el = this;
+      var proto =
+        el.tagName === "TEXTAREA"
+          ? window.HTMLTextAreaElement.prototype
+          : window.HTMLInputElement.prototype;
+      var desc = Object.getOwnPropertyDescriptor(proto, "value");
+      el.focus();
+      if (desc && desc.set) {
+        desc.set.call(el, v);
+      } else {
+        el.value = v;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      el.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
+      var rect = el.getBoundingClientRect();
+      return {
+        ok: true,
+        tag: el.tagName,
+        type: el.type || "",
+        name: el.name || el.id || "",
+        readOnly: !!el.readOnly,
+        disabled: !!el.disabled,
+        visible: !!(rect.width > 0 && rect.height > 0),
+        value: el.value,
+      };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  };
+
+  async function fillNode(tabId, nodeId, value) {
+    // Frappe clavier "trusted" d'abord (focus + sélection + insertText) :
+    // c'est ce qui fait réagir les composants les plus stricts.
+    try {
+      await send(tabId, "DOM.focus", { nodeId: nodeId });
+      await send(tabId, "Input.dispatchKeyEvent", {
+        type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+      });
+      await send(tabId, "Input.dispatchKeyEvent", {
+        type: "keyUp", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+      });
+      await send(tabId, "Input.insertText", { text: String(value) });
+    } catch (_) {
+      // pas grave : le setter natif ci-dessous prend le relais
+    }
+
+    // Puis setter natif + événements composés (au cas où insertText ait visé un
+    // input caché/proxy) + diagnostic sur le vrai input ciblé.
+    var resolved = await send(tabId, "DOM.resolveNode", { nodeId: nodeId });
+    var objectId = resolved && resolved.object && resolved.object.objectId;
+    if (!objectId) return { ok: false, error: "resolveNode sans objectId" };
+
+    var res = await send(tabId, "Runtime.callFunctionOn", {
+      objectId: objectId,
+      functionDeclaration: "(" + FILL_FN.toString() + ")",
+      arguments: [{ value: String(value) }],
+      returnByValue: true,
     });
-    await send(tabId, "Input.dispatchKeyEvent", {
-      type: "keyUp",
-      modifiers: 2,
-      key: "a",
-      code: "KeyA",
-      windowsVirtualKeyCode: 65,
-    });
-    await send(tabId, "Input.insertText", { text: value });
+    return (res && res.result && res.result.value) || { ok: false, error: "pas de retour" };
   }
 
   /**
@@ -153,6 +207,7 @@ var CdpFiller = (function () {
   async function fillFields(tabId, fields) {
     var filled = [];
     var failed = [];
+    var details = [];
     var attached = false;
     try {
       await attach(tabId);
@@ -168,16 +223,33 @@ var CdpFiller = (function () {
         var nodeId = map[f.formcontrolname];
         if (!nodeId) {
           failed.push(f.formcontrolname);
+          details.push(f.formcontrolname + " → AUCUN input trouvé dans le composant");
           continue;
         }
         try {
-          await typeInto(tabId, nodeId, String(f.value));
-          filled.push(f.formcontrolname);
-        } catch (_) {
+          var diag = await fillNode(tabId, nodeId, String(f.value));
+          // On considère "rempli" si le vrai input contient bien la valeur.
+          var landed = diag && diag.ok && String(diag.value) === String(f.value);
+          if (landed) {
+            filled.push(f.formcontrolname);
+          } else {
+            failed.push(f.formcontrolname);
+          }
+          details.push(
+            f.formcontrolname +
+              " → " +
+              (diag && diag.ok
+                ? "input<" + diag.tag + " type=" + diag.type + " name='" + diag.name + "'" +
+                  " visible=" + diag.visible + " ro=" + diag.readOnly + " dis=" + diag.disabled + ">" +
+                  " valeur=" + JSON.stringify(diag.value)
+                : "ECHEC " + (diag && diag.error)),
+          );
+        } catch (e) {
           failed.push(f.formcontrolname);
+          details.push(f.formcontrolname + " → exception " + (e && e.message));
         }
       }
-      return { success: true, filled: filled, failed: failed };
+      return { success: true, filled: filled, failed: failed, details: details };
     } catch (err) {
       return {
         success: false,
@@ -186,6 +258,7 @@ var CdpFiller = (function () {
         failed: fields.map(function (f) {
           return f.formcontrolname;
         }),
+        details: details,
       };
     } finally {
       if (attached) await detach(tabId);

@@ -1004,6 +1004,12 @@
             fallbackToManual(chrome.runtime.lastError.message);
             return;
           }
+          if (resp && resp.details) {
+            resp.details.forEach(function (d) {
+              Logger.log("CDP détail — " + d);
+            });
+          }
+
           if (!resp || !resp.success) {
             fallbackToManual(resp && resp.error);
             return;
