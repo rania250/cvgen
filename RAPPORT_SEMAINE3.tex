@@ -115,7 +115,7 @@ Informatique et mobilit\'e & \\
 
 \section{Semaine 3 --- Travaux r\'ealis\'es (18--25 mai 2026)}
 
-Cette semaine, Rania a finalis\'e l'extension Chrome avec un support complet des ATS majeurs, la gestion des sections dynamiques et la synchronisation avec le backend CVGen. Zakariae a avanc\'e sur l'import de CV PDF/Word et le module de g\'en\'eration IA.
+Cette semaine, Rania a finalis\'e l'extension Chrome avec un support complet des ATS majeurs, la gestion des sections dynamiques et la synchronisation avec le backend CVGen. Zakariae a mis en place les endpoints profil, l'architecture du module de g\'en\'eration et le mod\`ele de donn\'ees complet.
 
 \subsection{Extension Chrome --- Support ATS avanc\'e (Rania)}
 
@@ -132,18 +132,20 @@ Cette semaine, Rania a finalis\'e l'extension Chrome avec un support complet des
 \hline
 \end{tabularx}}
 
-\subsection{G\'en\'eration de CV \& Import (Zakariae)}
+\subsection{Backend CVGen --- Endpoints \& Architecture (Zakariae)}
 
 {\setlength{\arrayrulewidth}{0.5pt}\arrayrulecolor{tablegray}
 \begin{tabularx}{\linewidth}{|L{3.5cm}|X|L{2cm}|}
 \hline
 \THead{T\^ache} & \THead{D\'etails} & \THead{Assign\'e} \\
 \hline
-\rowcolor{rowalt}\textbf{Import CV PDF/Word} & Extraction automatique des donn\'ees depuis PDF (Apache PDFBox) et Word (.docx, Apache POI) vers le profil utilisateur & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\rowcolor{rowalt}\textbf{Endpoint profil complet} & D\'eveloppement de l'endpoint \texttt{/api/profile/complet} exposant l'int\'egralit\'e du profil utilisateur (identit\'e, exp\'eriences, formations, comp\'etences) pour la synchronisation avec l'extension Chrome & \textcolor{zakariae}{\textbf{Zakariae}} \\
 \hline
-\textbf{Module G\'en\'eration CV} & Int\'egration IA (Gemini) + LaTeX/Tectonic pour la g\'en\'eration de CV personnalis\'e par offre, export PDF haute qualit\'e & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\textbf{Architecture module g\'en\'eration} & Conception de l'architecture Spring Boot pour la g\'en\'eration de CV : entit\'es, services, int\'egration Gemini API et pipeline LaTeX/Tectonic & \textcolor{zakariae}{\textbf{Zakariae}} \\
 \hline
-\rowcolor{rowalt}\textbf{Scoring ATS} & Analyse de correspondance offre/profil, calcul du score ATS, suggestions d'optimisation des mots-cl\'es & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\rowcolor{rowalt}\textbf{Mod\`ele de donn\'ees profil} & Mise en place des migrations Flyway pour les tables profil, exp\'eriences, formations et comp\'etences ; exposition des endpoints CRUD profil & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\hline
+\textbf{Scoring ATS} & Analyse de correspondance offre/profil, calcul du score ATS, suggestions d'optimisation des mots-cl\'es & \textcolor{zakariae}{\textbf{Zakariae}} \\
 \hline
 \end{tabularx}}
 
@@ -176,7 +178,7 @@ Gemini API (IA) & \texttt{waitForElement} / DOM events & Git (multi-remote) \\
   colback=livbg, colframe=livgreen,
   arc=3pt, left=8pt, right=8pt, top=6pt, bottom=6pt
 ]
-\textcolor{livgreen}{\textbf{Crit\`eres de compl\'etion :} Dropdowns SF remplis~\textbullet~Endpoint profil op\'erationnel~\textbullet~G\'en\'eration CV fonctionnelle}
+\textcolor{livgreen}{\textbf{Crit\`eres de compl\'etion :} Dropdowns SF remplis~\textbullet~Endpoint profil op\'erationnel~\textbullet~Scoring ATS fonctionnel}
 \vspace{4pt}
 {\color{livgreen!50!black}\rule{\linewidth}{0.5pt}}
 \vspace{4pt}
@@ -185,9 +187,10 @@ Gemini API (IA) & \texttt{waitForElement} / DOM events & Git (multi-remote) \\
   \item Support des composants custom (dropdowns SuccessFactors, accordions, sections dynamiques avec boutons \guillemotleft~Ajouter~\guillemotright)
   \item Injection automatique du CV et de la lettre de motivation dans les champs de fichier des portails ATS (Shadow DOM, SuccessFactors, Workday, LinkedIn)
   \item Extraction automatique du titre et du texte de l'offre depuis la page de candidature
-  \item Import CV PDF et Word vers profil utilisateur
-  \item G\'en\'eration de CV personnalis\'e via IA (Gemini) + export PDF (Tectonic/LaTeX)
-  \item Scoring ATS : correspondance offre/profil avec suggestions
+  \item Endpoint \texttt{/api/profile/complet} op\'erationnel pour la synchronisation extension-backend
+  \item Architecture du module de g\'en\'eration de CV (Spring Boot, Gemini API, pipeline LaTeX/Tectonic)
+  \item Mod\`ele de donn\'ees profil complet (migrations Flyway, endpoints CRUD)
+  \item Scoring ATS : analyse de correspondance offre/profil avec suggestions d'optimisation
 \end{itemize}
 \end{tcolorbox}
 
@@ -199,7 +202,7 @@ Gemini API (IA) & \texttt{waitForElement} / DOM events & Git (multi-remote) \\
 
 \section{Semaine 4 --- Roadmap (26 mai -- 1\textsuperscript{er} juin 2026)}
 
-Pour la semaine 4, Rania int\`egre un agent IA dans l'extension Chrome capable de postuler automatiquement \`a des offres d'emploi. Zakariae travaille sur la g\'en\'eration de lettre de motivation c\^ot\'e backend et l'am\'elioration de l'exp\'erience utilisateur (choix de template CV, UI/UX).
+Pour la semaine 4, Rania int\`egre un agent IA dans l'extension Chrome capable de postuler automatiquement \`a des offres d'emploi. Zakariae finalise l'import de CV PDF/Word et le module de g\'en\'eration avec choix de templates.
 
 \subsection{Rania --- Agent IA de candidature automatique (S4)}
 
@@ -214,18 +217,16 @@ Pour la semaine 4, Rania int\`egre un agent IA dans l'extension Chrome capable d
 \hline
 \end{tabularx}}
 
-\subsection{Zakariae --- Lettre de motivation \& Templates CV (S4)}
+\subsection{Zakariae --- G\'en\'eration CV, Import \& Templates (S4)}
 
 {\setlength{\arrayrulewidth}{0.5pt}\arrayrulecolor{tablegray}
 \begin{tabularx}{\linewidth}{|L{3.5cm}|X|L{2cm}|}
 \hline
 \THead{T\^ache} & \THead{D\'etails} & \THead{Assign\'e} \\
 \hline
-\rowcolor{rowalt}\textbf{Lettre de motivation IA} & G\'en\'eration automatique c\'ot\'e backend (Gemini), personnalis\'ee par offre, expos\'ee via API et injectable depuis l'extension & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\rowcolor{rowalt}\textbf{Import CV PDF/Word} & Extraction automatique des donn\'ees depuis PDF (Apache PDFBox) et Word (.docx, Apache POI) vers le profil utilisateur & \textcolor{zakariae}{\textbf{Zakariae}} \\
 \hline
-\textbf{Choix de template CV} & S\'election de template dans l'interface web (3 mod\`eles minimum), pr\'evisualisation en temps r\'eel, export PDF & \textcolor{zakariae}{\textbf{Zakariae}} \\
-\hline
-\rowcolor{rowalt}\textbf{Am\'elioration UI/UX site} & Am\'elioration du dashboard web (animations, accessibilit\'e, retours utilisateur) & \textcolor{zakariae}{\textbf{Zakariae}} \\
+\textbf{Module G\'en\'eration CV \& Templates} & G\'en\'eration de CV personnalis\'e par offre via IA (Gemini) + LaTeX/Tectonic, avec choix de template (3 mod\`eles minimum), pr\'evisualisation et export PDF & \textcolor{zakariae}{\textbf{Zakariae}} \\
 \hline
 \end{tabularx}}
 
@@ -233,9 +234,9 @@ Pour la semaine 4, Rania int\`egre un agent IA dans l'extension Chrome capable d
 
 L'extension Chrome a fait un bond significatif cette semaine : le support des portails RH type SAP SuccessFactors est op\'erationnel, les bugs de d\'etection de champs sont corrig\'es, et la synchronisation avec le backend est fonctionnelle gr\^ace au nouvel endpoint \texttt{/api/profile/complet}. La couverture monte \`a 12 ATS/jobboards support\'es.
 
-C\^ot\'e backend, le module de g\'en\'eration de CV (Gemini + Tectonic) est en place et l'import de fichiers CV existants est pris en charge. Le scoring ATS compl\`ete la cha\^ine de valeur de la plateforme.
+C\^ot\'e backend, l'endpoint \texttt{/api/profile/complet} est op\'erationnel et l'architecture du module de g\'en\'eration de CV est en place. Le mod\`ele de donn\'ees profil est complet avec toutes les migrations Flyway.
 
-La semaine 4 se concentre sur l'automatisation compl\`ete : Rania int\`egre l'agent IA de postulation dans l'extension Chrome, tandis que Zakariae finalise la g\'en\'eration de lettre de motivation c\^ot\'e backend et le choix de templates CV.
+La semaine 4 se concentre sur l'impl\'ementation compl\`ete : Rania int\`egre l'agent IA de postulation dans l'extension Chrome, tandis que Zakariae finalise l'import de CV PDF/Word, la g\'en\'eration avec templates et le scoring ATS.
 
 \vspace{1em}
 
@@ -243,7 +244,7 @@ La semaine 4 se concentre sur l'automatisation compl\`ete : Rania int\`egre l'ag
   colback=techbg, colframe=accentblue,
   arc=3pt, left=8pt, right=8pt, top=6pt, bottom=6pt
 ]
-\textbf{Prochain rapport :} Sprint S4 --- Agent IA extension (Rania) \& Lettre de motivation backend (Zakariae) --- 26 mai 2026
+\textbf{Prochain rapport :} Sprint S4 --- Agent IA extension (Rania) \& G\'en\'eration CV + Templates (Zakariae) --- 26 mai 2026
 \end{tcolorbox}
 
 \end{document}
