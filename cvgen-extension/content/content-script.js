@@ -1242,6 +1242,25 @@
         });
       });
 
+    // Champs Web Components à Shadow DOM fermé (SmartRecruiters/Sopra Steria) :
+    // invisibles pour la détection classique (input scellé) mais remplissables
+    // via CDP. On les compte pour ne pas afficher "0 champ" et ne pas désactiver
+    // le bouton "Remplir le formulaire".
+    try {
+      var ocEls =
+        typeof querySelectorAllDeep === "function"
+          ? querySelectorAllDeep(document, "oc-input")
+          : document.querySelectorAll("oc-input");
+      for (var o = 0; o < ocEls.length; o++) {
+        var ocName =
+          ocEls[o].getAttribute("formcontrolname") ||
+          ocEls[o].getAttribute("attrid") ||
+          ocEls[o].getAttribute("data-test") ||
+          "champ";
+        results.push({ type: "custom", label: ocName, tag: "oc-input" });
+      }
+    } catch (_) {}
+
     return results;
   }
 })();
