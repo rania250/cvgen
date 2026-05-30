@@ -605,3 +605,132 @@ details[open] .fields-summary::after {
   background: var(--color-border);
   border-radius: 2px;
 }
+
+/* ── Agent IA ────────────────────────────────────────────── */
+
+.ai-section {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.02));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.ai-badge {
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+.ai-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.btn-ai {
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  color: #fff;
+}
+.btn-ai:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.ai-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.ai-steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ai-steps li.done {
+  color: var(--color-success);
+}
+.ai-steps li.active {
+  color: var(--color-text);
+}
+.ai-step-icon {
+  font-size: 12px;
+}
+
+.ai-preview {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  font-size: 12px;
+}
+.ai-preview-head {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.ai-doc-line {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 2px 0;
+}
+.ai-letter-details {
+  margin-top: 6px;
+}
+.ai-letter-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-accent);
+}
+.ai-letter-text {
+  width: 100%;
+  margin-top: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  font-size: 11px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.ai-submit-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 8px;
+}
+.ai-submit-info {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}

@@ -163,7 +163,61 @@
         </div>
       </div>
 
-      <!-- Action principale -->
+      <!-- ════════════════ AGENT IA — Auto-postulation ════════════════ -->
+      <div class="ai-section">
+        <div class="ai-title">
+          <span class="ai-badge">IA</span>
+          Postuler automatiquement
+        </div>
+        <p class="ai-desc">
+          L'agent lit l'offre, génère un CV et une lettre adaptés, remplit le
+          formulaire puis vous propose d'envoyer.
+        </p>
+
+        <button id="btn-ai-apply" class="btn btn-ai btn-full">
+          <span id="btn-ai-text">⚡ Lancer l'agent IA</span>
+          <span id="btn-ai-spinner" class="spinner" style="display: none"></span>
+        </button>
+
+        <!-- Étapes de progression -->
+        <ul id="ai-steps" class="ai-steps" style="display: none">
+          <li data-step="offer"><span class="ai-step-icon">○</span> Lecture de l'offre</li>
+          <li data-step="cv"><span class="ai-step-icon">○</span> Génération du CV optimisé</li>
+          <li data-step="cover"><span class="ai-step-icon">○</span> Rédaction de la lettre</li>
+          <li data-step="fill"><span class="ai-step-icon">○</span> Remplissage du formulaire</li>
+        </ul>
+
+        <!-- Aperçu lettre + résumé -->
+        <div id="ai-preview" class="ai-preview" style="display: none">
+          <div class="ai-preview-head">
+            <span id="ai-preview-title">Documents prêts</span>
+          </div>
+          <div class="ai-doc-line" id="ai-cv-line" style="display:none">📄 <span id="ai-cv-name"></span></div>
+          <div class="ai-doc-line" id="ai-lm-line" style="display:none">💌 <span id="ai-lm-name"></span></div>
+          <details class="ai-letter-details" id="ai-letter-details" style="display:none">
+            <summary>Voir la lettre générée</summary>
+            <textarea id="ai-letter-text" class="ai-letter-text" rows="8"></textarea>
+            <button id="btn-ai-letter-save" class="btn btn-secondary btn-sm">Enregistrer les modifications</button>
+          </details>
+        </div>
+
+        <!-- Confirmation d'envoi -->
+        <div id="ai-submit-zone" class="ai-submit-zone" style="display: none">
+          <div id="ai-submit-info" class="ai-submit-info"></div>
+          <button id="btn-ai-submit" class="btn btn-danger btn-full">
+            ⚡ Envoyer la candidature
+          </button>
+          <button id="btn-ai-skip" class="btn btn-ghost btn-full">
+            Je vérifie d'abord (ne pas envoyer)
+          </button>
+        </div>
+
+        <div id="ai-result" class="fill-result" style="display: none"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Action principale (remplissage simple, sans IA) -->
       <button id="btn-fill" class="btn btn-primary btn-full" disabled>
         <svg
           xmlns="http://www.w3.org/2000/svg"
