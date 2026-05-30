@@ -245,11 +245,13 @@ var CdpFiller = (function () {
     }
   }
 
-  // Nombre de passes : Angular peut re-render et vider les champs juste après
-  // le remplissage (validation de formulaire). On re-remplit donc ce qui a été
-  // vidé, sur plusieurs passes espacées, jusqu'à ce que la valeur tienne.
-  var MAX_PASSES = 4;
-  var PASS_DELAY_MS = 1200;
+  // Angular peut re-render et vider les champs APRÈS le remplissage (re-render
+  // tardif déclenché par la dernière sauvegarde d'expérience/formation). On
+  // attend donc d'abord que ça se stabilise, puis on re-remplit ce qui a été
+  // vidé sur plusieurs passes espacées, sur une fenêtre longue.
+  var INITIAL_SETTLE_MS = 1600; // laisser le re-render post-sauvegarde se produire
+  var MAX_PASSES = 6;
+  var PASS_DELAY_MS = 1500;
 
   async function fillFields(tabId, fields) {
     var details = [];
@@ -260,6 +262,10 @@ var CdpFiller = (function () {
       await attach(tabId);
       attached = true;
       await send(tabId, "DOM.enable", {});
+
+      // Attendre que le formulaire se stabilise (les sauvegardes précédentes
+      // déclenchent un re-render qui, sinon, écraserait notre remplissage).
+      await sleep(INITIAL_SETTLE_MS);
 
       for (var pass = 1; pass <= MAX_PASSES; pass++) {
         // Re-scanner l'arbre à chaque passe : si Angular a recréé un input
