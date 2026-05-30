@@ -23,7 +23,13 @@ var CdpFiller = (function () {
 
   var DEBUGGER_VERSION = "1.3";
 
-  function attach(tabId) {
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function attachOnce(tabId) {
     return new Promise(function (resolve, reject) {
       chrome.debugger.attach({ tabId: tabId }, DEBUGGER_VERSION, function () {
         if (chrome.runtime.lastError) {
@@ -33,6 +39,24 @@ var CdpFiller = (function () {
         }
       });
     });
+  }
+
+  // Attache robuste : si une session précédente est restée accrochée
+  // ("Another debugger is already attached"), on détache puis on réessaie.
+  async function attach(tabId) {
+    try {
+      await attachOnce(tabId);
+      return;
+    } catch (e1) {
+      var msg = (e1 && e1.message) || "";
+      if (/already attached|already being debugged/i.test(msg)) {
+        await detach(tabId);
+        await sleep(300);
+        await attachOnce(tabId); // si ça échoue encore, on laisse remonter
+        return;
+      }
+      throw e1;
+    }
   }
 
   function detach(tabId) {
