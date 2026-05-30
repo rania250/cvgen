@@ -797,20 +797,19 @@
         var value = getValueForField(mapping.key, profil, coverLetter);
         if (!value) continue;
 
-        // Stratégie unique fiable : descendre dans le shadow tree SI ouvert
+        // Descendre dans le shadow tree (rendu accessible par
+        // force-open-shadow.js qui force mode:"open" à la création).
         var innerInput = null;
         try {
-          var sr1 = ocEl.shadowRoot;
-          if (sr1) {
-            var splNode = sr1.querySelector("spl-input, spl-text-input");
-            var sr2 = splNode && splNode.shadowRoot;
-            var ifield =
-              sr2 && sr2.querySelector("spl-internal-form-field, .c-spl-input-wrapper");
-            var sr3 = ifield && ifield.shadowRoot;
-            innerInput =
-              (sr3 && sr3.querySelector("input, textarea")) ||
-              (sr2 && sr2.querySelector("input, textarea")) ||
-              (sr1 && sr1.querySelector("input, textarea"));
+          var rootSr = ocEl.shadowRoot;
+          if (rootSr) {
+            if (typeof querySelectorAllDeep === "function") {
+              var deepInputs = querySelectorAllDeep(rootSr, "input, textarea");
+              innerInput = deepInputs && deepInputs.length ? deepInputs[0] : null;
+            }
+            if (!innerInput) {
+              innerInput = rootSr.querySelector("input, textarea");
+            }
           }
         } catch (_) {}
 

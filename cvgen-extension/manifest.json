@@ -64,6 +64,31 @@
         "https://*.icims.com/*",
         "https://*.jobvite.com/*"
       ],
+      "js": ["content/force-open-shadow.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://fr.indeed.com/*",
+        "https://www.indeed.com/*",
+        "https://www.linkedin.com/*",
+        "https://www.welcometothejungle.com/*",
+        "https://candidat.francetravail.fr/*",
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.workday.com/*",
+        "https://*.successfactors.eu/*",
+        "https://*.successfactors.com/*",
+        "https://*.taleo.net/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.icims.com/*",
+        "https://*.jobvite.com/*"
+      ],
       "js": [
         "utils/logger.js",
         "utils/storage.js",
