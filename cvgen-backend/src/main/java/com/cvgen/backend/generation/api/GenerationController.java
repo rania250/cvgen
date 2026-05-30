@@ -1,9 +1,14 @@
 package com.cvgen.backend.generation.api;
 
 import com.cvgen.backend.auth.infrastructure.persistence.UserJpaRepository;
+import com.cvgen.backend.generation.api.dto.CoverLetterDto;
+import com.cvgen.backend.generation.api.dto.CoverLetterPdfRequest;
 import com.cvgen.backend.generation.api.dto.ExportPdfRequest;
+import com.cvgen.backend.generation.api.dto.GenerateCoverLetterRequest;
 import com.cvgen.backend.generation.api.dto.GenerateCvRequest;
 import com.cvgen.backend.generation.api.dto.SelectedCvContent;
+import com.cvgen.backend.generation.application.CoverLetterPdfService;
+import com.cvgen.backend.generation.application.CoverLetterService;
 import com.cvgen.backend.generation.application.GenerationService;
 import com.cvgen.backend.generation.application.LatexTemplateService;
 import com.cvgen.backend.generation.application.TectonicPdfCompiler;
@@ -38,6 +43,8 @@ public class GenerationController {
     private final GenerationService generationService;
     private final LatexTemplateService latexTemplateService;
     private final TectonicPdfCompiler pdfCompiler;
+    private final CoverLetterService coverLetterService;
+    private final CoverLetterPdfService coverLetterPdfService;
     private final UserJpaRepository userRepository;
 
     @PostMapping("/generate")
@@ -80,6 +87,42 @@ public class GenerationController {
         return ResponseEntity.ok()
                 .headers(headers)
                 .body(pdfBytes);
+    }
+
+    @PostMapping("/cover-letter")
+    @Operation(summary = "Génère une lettre de motivation adaptée à une offre d'emploi")
+    public ResponseEntity<ApiResponse<CoverLetterDto>> generateCoverLetter(
+            Authentication auth,
+            @Valid @RequestBody GenerateCoverLetterRequest request) {
+        UUID userId = currentUserId(auth);
+        CoverLetterDto result = coverLetterService.generate(
+                userId,
+                request.getJobOfferText(),
+                request.getCompany(),
+                request.getJobTitle(),
+                request.getTone());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Lettre de motivation générée", result));
+    }
+
+    @PostMapping("/cover-letter/pdf")
+    @Operation(summary = "Convertit une lettre de motivation (texte) en PDF")
+    public ResponseEntity<byte[]> coverLetterPdf(
+            Authentication auth,
+            @Valid @RequestBody CoverLetterPdfRequest request) {
+        UUID userId = currentUserId(auth);
+        byte[] pdfBytes = coverLetterPdfService.generatePdf(userId, request.getContent());
+
+        String fileName = String.format("Lettre_Motivation_%s_%s.pdf",
+                userId.toString().substring(0, 8),
+                LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", fileName);
+        headers.setContentLength(pdfBytes.length);
+
+        return ResponseEntity.ok().headers(headers).body(pdfBytes);
     }
 
     /**

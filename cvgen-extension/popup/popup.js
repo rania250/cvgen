@@ -390,6 +390,178 @@ document
     }
   });
 
+// ═══════════════════ AGENT IA — Auto-postulation ═══════════════════
+
+function aiSetStep(step, state) {
+  const li = document.querySelector('#ai-steps li[data-step="' + step + '"]');
+  if (!li) return;
+  li.classList.remove("active", "done");
+  const icon = li.querySelector(".ai-step-icon");
+  if (state === "active") {
+    li.classList.add("active");
+    if (icon) icon.textContent = "◐";
+  } else if (state === "done") {
+    li.classList.add("done");
+    if (icon) icon.textContent = "✓";
+  } else {
+    if (icon) icon.textContent = "○";
+  }
+}
+
+function aiResetSteps() {
+  ["offer", "cv", "cover", "fill"].forEach(function (s) { aiSetStep(s, "pending"); });
+}
+
+function aiShowResult(message, kind) {
+  const el = document.getElementById("ai-result");
+  el.textContent = message;
+  el.className = "fill-result " + (kind || "success");
+  el.style.display = "block";
+}
+
+document
+  .getElementById("btn-ai-apply")
+  .addEventListener("click", async function () {
+    const btn = document.getElementById("btn-ai-apply");
+    const btnText = document.getElementById("btn-ai-text");
+    const spinner = document.getElementById("btn-ai-spinner");
+    const steps = document.getElementById("ai-steps");
+    const preview = document.getElementById("ai-preview");
+    const submitZone = document.getElementById("ai-submit-zone");
+    const resultEl = document.getElementById("ai-result");
+
+    btn.disabled = true;
+    btnText.style.display = "none";
+    spinner.style.display = "inline-block";
+    steps.style.display = "flex";
+    preview.style.display = "none";
+    submitZone.style.display = "none";
+    resultEl.style.display = "none";
+    aiResetSteps();
+
+    try {
+      // 1. Lecture de l'offre depuis la page
+      aiSetStep("offer", "active");
+      const offerResp = await sendToContentScript({ type: "EXTRACT_OFFER" });
+      if (!offerResp || !offerResp.success || !offerResp.offer) {
+        throw new Error("Impossible de lire l'offre sur cette page.");
+      }
+      const offer = offerResp.offer;
+      if (!offer.offerText || offer.offerText.length < 30) {
+        throw new Error(
+          "Offre trop courte/illisible. Ouvrez la page de description de l'offre puis réessayez.",
+        );
+      }
+      aiSetStep("offer", "done");
+
+      // 2+3. Génération CV + lettre (backend Gemini)
+      aiSetStep("cv", "active");
+      const prep = await sendToServiceWorker({
+        type: "AI_PREPARE",
+        payload: { offer: offer, tone: "formel" },
+      });
+      if (!prep || !prep.success) {
+        throw new Error(prep && prep.error ? prep.error : "Échec de génération IA.");
+      }
+      aiSetStep("cv", "done");
+      aiSetStep("cover", "done");
+
+      // Aperçu documents
+      preview.style.display = "block";
+      await refreshDocStatus();
+      if (prep.cvName) {
+        document.getElementById("ai-cv-line").style.display = "block";
+        document.getElementById("ai-cv-name").textContent = prep.cvName;
+      }
+      if (prep.lmName) {
+        document.getElementById("ai-lm-line").style.display = "block";
+        document.getElementById("ai-lm-name").textContent = prep.lmName;
+      }
+      if (prep.coverLetterText) {
+        document.getElementById("ai-letter-details").style.display = "block";
+        document.getElementById("ai-letter-text").value = prep.coverLetterText;
+      }
+
+      // 4. Remplissage du formulaire (réutilise FILL_FORM, overwrite activé)
+      aiSetStep("fill", "active");
+      const fillResp = await sendToContentScript({
+        type: "FILL_FORM",
+        options: { overwrite: true, showToast: true },
+      });
+      aiSetStep("fill", "done");
+
+      const filledN = fillResp && fillResp.success ? fillResp.filled : 0;
+      aiShowResult(
+        "Documents générés et " + filledN + " champ(s) rempli(s). Vérifiez puis envoyez.",
+        "success",
+      );
+
+      // 5. Détecter le bouton d'envoi et proposer la confirmation
+      try {
+        const sub = await sendToContentScript({ type: "AI_DESCRIBE_SUBMIT" });
+        const info = document.getElementById("ai-submit-info");
+        if (sub && sub.success && sub.submit && sub.submit.found) {
+          info.textContent = 'Bouton détecté : "' + (sub.submit.label || "Envoyer") + '"';
+        } else {
+          info.textContent =
+            "Bouton d'envoi non détecté automatiquement — cliquez-le vous-même sur la page.";
+        }
+      } catch (_) {
+        document.getElementById("ai-submit-info").textContent =
+          "Vérifiez le formulaire avant d'envoyer.";
+      }
+      submitZone.style.display = "flex";
+    } catch (err) {
+      aiShowResult(err.message || "Erreur de l'agent IA.", "error");
+      Logger.error("AI_APPLY error", err);
+    } finally {
+      btn.disabled = false;
+      btnText.style.display = "inline";
+      spinner.style.display = "none";
+    }
+  });
+
+// --- Enregistrer les modifications de la lettre ---
+document
+  .getElementById("btn-ai-letter-save")
+  .addEventListener("click", async function () {
+    const text = document.getElementById("ai-letter-text").value || "";
+    await Storage.setCoverLetter(text);
+    aiShowResult("Lettre mise à jour. Relancez le remplissage pour l'appliquer.", "success");
+  });
+
+// --- Confirmer l'envoi de la candidature ---
+document
+  .getElementById("btn-ai-submit")
+  .addEventListener("click", async function () {
+    const btn = document.getElementById("btn-ai-submit");
+    btn.disabled = true;
+    try {
+      const res = await sendToContentScript({
+        type: "AI_SUBMIT",
+        options: { confirm: true },
+      });
+      if (res && res.success) {
+        aiShowResult("✓ Candidature envoyée (" + (res.label || "bouton cliqué") + ").", "success");
+        document.getElementById("ai-submit-zone").style.display = "none";
+      } else {
+        aiShowResult(res && res.error ? res.error : "Échec de l'envoi.", "error");
+      }
+    } catch (err) {
+      aiShowResult("Impossible d'envoyer : " + err.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+// --- Ne pas envoyer (vérification manuelle) ---
+document
+  .getElementById("btn-ai-skip")
+  .addEventListener("click", function () {
+    document.getElementById("ai-submit-zone").style.display = "none";
+    aiShowResult("Envoi annulé. Vérifiez puis cliquez le bouton d'envoi vous-même.", "success");
+  });
+
 // --- Actualiser le profil ---
 document
   .getElementById("btn-sync")
@@ -588,6 +760,7 @@ async function sendToContentScript(message) {
         "content/date-handler.js",
         "content/offer-extractor.js",
         "content/file-uploader.js",
+        "content/submit-handler.js",
         "content/content-script.js",
       ],
     });

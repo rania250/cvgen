@@ -175,6 +175,27 @@
           }
           return false;
 
+        case "AI_DESCRIBE_SUBMIT":
+          try {
+            var desc = window.SubmitHandler ? SubmitHandler.describe() : { found: false };
+            sendResponse({ success: true, submit: desc });
+          } catch (err) {
+            sendResponse({ success: false, error: err.message });
+          }
+          return false;
+
+        case "AI_SUBMIT":
+          if (!window.SubmitHandler) {
+            sendResponse({ success: false, error: "Module de soumission indisponible." });
+            return false;
+          }
+          SubmitHandler.submit(message.options || {})
+            .then(function (res) { sendResponse(res); })
+            .catch(function (err) {
+              sendResponse({ success: false, error: err.message });
+            });
+          return true; // réponse asynchrone
+
         case "PING":
           sendResponse({ success: true, alive: true });
           return false;

@@ -74,6 +74,7 @@
         "content/date-handler.js",
         "content/offer-extractor.js",
         "content/file-uploader.js",
+        "content/submit-handler.js",
         "content/content-script.js"
       ],
       "run_at": "document_idle",

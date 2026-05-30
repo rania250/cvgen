@@ -55,6 +55,9 @@ async function handleMessage(message, sender) {
     case "GET_USER":
       return handleGetUser();
 
+    case "AI_PREPARE":
+      return handleAiPrepare(message.payload);
+
     default:
       Logger.warn("Type de message inconnu: " + message.type);
       return {
@@ -176,4 +179,105 @@ async function handleGetUser() {
     user: user || null,
     isAuthenticated: !!(user && token),
   };
+}
+
+/**
+ * Agent IA — prépare les documents pour une candidature :
+ *  1. génère un CV optimisé pour l'offre (Gemini)
+ *  2. exporte ce CV en PDF
+ *  3. génère une lettre de motivation (Gemini)
+ *  4. convertit la lettre en PDF
+ *
+ * Stocke le tout dans chrome.storage.local (cvBase64, lmBase64,
+ * lettreMotivation…) afin que le flux FILL_FORM existant l'utilise.
+ *
+ * @param {{ offer: { title?: string, company?: string, offerText?: string }, tone?: string }} payload
+ */
+async function handleAiPrepare(payload) {
+  const offer = (payload && payload.offer) || {};
+  const offerText = (offer.offerText || "").trim();
+  const company = offer.company || "";
+  const jobTitle = offer.title || "";
+  const tone = (payload && payload.tone) || "formel";
+
+  if (!offerText || offerText.length < 30) {
+    return {
+      success: false,
+      error:
+        "Offre introuvable ou trop courte sur cette page. Ouvrez la page de l'offre puis réessayez.",
+    };
+  }
+
+  const result = { steps: {} };
+
+  try {
+    // 1. CV optimisé
+    Logger.log("Agent IA — génération du CV optimisé…");
+    const cvResp = await apiFetch("/api/generation/generate", {
+      method: "POST",
+      body: JSON.stringify({ jobOfferText: offerText }),
+    });
+    const cvData = cvResp.data || cvResp;
+    const generatedCvId = cvData.generatedCvId;
+    result.steps.cv = true;
+    result.cvTitle = cvData.title || "";
+
+    // 2. Export CV → PDF
+    if (generatedCvId) {
+      Logger.log("Agent IA — export PDF du CV…");
+      const cvPdf = await apiFetchBinary(
+        "/api/generation/" + generatedCvId + "/export-pdf",
+        { method: "POST", body: JSON.stringify({ templateId: "template1" }) },
+      );
+      const cvName = cvPdf.fileName || "CV_CVGen.pdf";
+      await Storage.set("cvBase64", cvPdf.base64);
+      await Storage.set("cvFileName", cvName);
+      result.cvName = cvName;
+      result.steps.cvPdf = true;
+    }
+
+    // 3. Lettre de motivation
+    Logger.log("Agent IA — génération de la lettre de motivation…");
+    const clResp = await apiFetch("/api/generation/cover-letter", {
+      method: "POST",
+      body: JSON.stringify({
+        jobOfferText: offerText,
+        company: company,
+        jobTitle: jobTitle,
+        tone: tone,
+      }),
+    });
+    const clData = clResp.data || clResp;
+    const coverLetterText = clData.content || "";
+    if (coverLetterText) {
+      await Storage.setCoverLetter(coverLetterText);
+      result.coverLetterText = coverLetterText;
+      result.steps.coverLetter = true;
+    }
+
+    // 4. Lettre → PDF
+    if (coverLetterText) {
+      Logger.log("Agent IA — export PDF de la lettre…");
+      const clPdf = await apiFetchBinary("/api/generation/cover-letter/pdf", {
+        method: "POST",
+        body: JSON.stringify({ content: coverLetterText }),
+      });
+      const lmName = clPdf.fileName || "Lettre_Motivation.pdf";
+      await Storage.set("lmBase64", clPdf.base64);
+      await Storage.set("lmFileName", lmName);
+      result.lmName = lmName;
+      result.steps.coverLetterPdf = true;
+    }
+
+    result.success = true;
+    Logger.log("Agent IA — documents prêts.");
+    return result;
+  } catch (err) {
+    Logger.error("Agent IA — échec de préparation", err);
+    return {
+      success: false,
+      error: err.message || "Erreur lors de la préparation des documents IA.",
+      steps: result.steps,
+    };
+  }
 }
