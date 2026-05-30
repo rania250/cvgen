@@ -150,6 +150,28 @@ var OfferExtractor = (function () {
     }
 
     var combined = texts.join('\n\n');
+
+    // Dernier recours : si on n'a quasiment rien trouvé (ex. page de
+    // formulaire de candidature sans bloc "description"), on prend le texte
+    // visible principal de la page, nettoyé des lignes trop courtes/répétées.
+    if (combined.trim().length < 120) {
+      var bodyText = (document.body && document.body.innerText || '').trim();
+      var lines = bodyText.split('\n');
+      var kept = [];
+      var seenLine = {};
+      for (var l = 0; l < lines.length; l++) {
+        var line = lines[l].trim();
+        if (line.length < 3) continue;          // ignore lignes vides/parasites
+        if (seenLine[line]) continue;            // dédoublonne
+        seenLine[line] = true;
+        kept.push(line);
+      }
+      var fallback = kept.join('\n');
+      if (fallback.length > combined.length) {
+        combined = fallback;
+      }
+    }
+
     if (combined.length > MAX_TEXT_LENGTH) {
       combined = combined.substring(0, MAX_TEXT_LENGTH);
     }

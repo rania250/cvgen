@@ -446,12 +446,20 @@ document
       if (!offerResp || !offerResp.success || !offerResp.offer) {
         throw new Error("Impossible de lire l'offre sur cette page.");
       }
-      const offer = offerResp.offer;
-      if (!offer.offerText || offer.offerText.length < 30) {
+      const offer = offerResp.offer || {};
+      // Texte d'offre effectif = titre + entreprise + description trouvée.
+      // Permet de fonctionner même sur une page de formulaire (peu de texte)
+      // tant qu'on a au moins un intitulé de poste.
+      const effectiveText = [offer.title, offer.company, offer.offerText]
+        .filter(Boolean)
+        .join("\n")
+        .trim();
+      if (effectiveText.length < 15) {
         throw new Error(
-          "Offre trop courte/illisible. Ouvrez la page de description de l'offre puis réessayez.",
+          "Aucune offre détectée sur cette page. Ouvrez la page de l'offre (sa description) puis réessayez.",
         );
       }
+      offer.offerText = effectiveText;
       aiSetStep("offer", "done");
 
       // 2+3. Génération CV + lettre (backend Gemini)
