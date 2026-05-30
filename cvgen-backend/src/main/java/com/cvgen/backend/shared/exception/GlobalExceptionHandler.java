@@ -11,6 +11,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -102,6 +103,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(message));
+    }
+
+    // Statut + message explicites (ex. quota IA Gemini 429, BAD_GATEWAY 502
+    // levés par GeminiClient). Doit être traité AVANT le fallback Exception,
+    // sinon le vrai message est masqué par un 500 générique.
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResponseStatus(ResponseStatusException ex) {
+        String reason = ex.getReason() != null ? ex.getReason() : "Erreur lors du traitement de la requête";
+        log.warn("ResponseStatusException {} : {}", ex.getStatusCode(), reason);
+        return ResponseEntity
+                .status(ex.getStatusCode())
+                .body(ApiResponse.error(reason));
     }
 
     // 500 - Fallback

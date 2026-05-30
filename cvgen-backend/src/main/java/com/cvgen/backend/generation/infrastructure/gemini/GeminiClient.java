@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -118,9 +119,29 @@ public class GeminiClient {
                         "Service IA indisponible (Gemini " + ex.getStatusCode().value()
                                 + "). Vérifiez la clé API ou réessayez plus tard.");
 
+            } catch (HttpServerErrorException ex) {
+                // 5xx Gemini (ex. 503 "model overloaded", fréquent sur le tier
+                // gratuit). On retente quelques fois puis on remonte un message
+                // clair au lieu d'un 500 opaque.
+                log.warn("Gemini 5xx ({}) — tentative {}/{}", ex.getStatusCode(), attempt, MAX_ATTEMPTS);
+                if (attempt < MAX_ATTEMPTS) {
+                    sleep(RETRY_DELAY_MS);
+                    continue;
+                }
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Service IA momentanément surchargé (Gemini " + ex.getStatusCode().value()
+                                + "). Réessayez dans quelques instants.");
+
+            } catch (ResponseStatusException e) {
+                throw e; // déjà porteur d'un statut/message explicite
+
             } catch (RuntimeException e) {
+                // Erreurs réseau (ResourceAccessException), réponse vide, etc.
                 log.error("Erreur lors de l'appel à Gemini", e);
-                throw new RuntimeException("Erreur de génération via Gemini: " + e.getMessage(), e);
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Service IA injoignable : " + e.getMessage());
             }
         }
         // Inatteignable en théorie (la boucle retourne ou lève toujours).
