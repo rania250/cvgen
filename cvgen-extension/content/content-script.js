@@ -778,6 +778,7 @@
           ? querySelectorAllDeep(document, "oc-input")
           : document.querySelectorAll("oc-input");
       var manualOcFields = [];
+      var ocClosedFields = []; // shadow fermé → tentative via CDP (chrome.debugger)
 
       for (var oc = 0; oc < ocInputs.length; oc++) {
         var ocEl = ocInputs[oc];
@@ -821,16 +822,34 @@
             Logger.log("oc-input rempli (shadow ouvert) : " + fcn + " = " + value);
           } catch (_) {}
         } else {
-          // Shadow fermé → non remplissable : on surligne et on note la valeur
-          manualOcFields.push({ label: mapping.label, value: value });
-          highlightManualField(ocEl);
+          // Shadow DOM fermé (souvent Declarative Shadow DOM "closed") :
+          // inaccessible au JS. On tentera via CDP (chrome.debugger) côté
+          // service worker, qui sait percer les shadow roots fermés.
+          var rawFcn =
+            ocEl.getAttribute("formcontrolname") ||
+            ocEl.getAttribute("attrid") ||
+            ocEl.getAttribute("data-test") ||
+            "";
+          if (rawFcn) {
+            ocClosedFields.push({
+              el: ocEl,
+              formcontrolname: rawFcn,
+              value: value,
+              label: mapping.label,
+            });
+          } else {
+            manualOcFields.push({ label: mapping.label, value: value });
+            highlightManualField(ocEl);
+          }
           Logger.warn(
-            "oc-input '" + fcn + "' : Shadow DOM fermé → à remplir manuellement (" + mapping.label + ")"
+            "oc-input '" + fcn + "' : Shadow DOM fermé → tentative CDP (" + mapping.label + ")"
           );
         }
       }
 
-      if (manualOcFields.length > 0) {
+      if (ocClosedFields.length > 0) {
+        fillClosedShadowViaCDP(ocClosedFields, manualOcFields);
+      } else if (manualOcFields.length > 0) {
         showManualFieldsBanner(manualOcFields);
       }
     } catch (ocErr) {
@@ -950,6 +969,70 @@
       el.setAttribute("title", "CVGen : champ verrouillé par le site, à remplir à la main");
       el.scrollIntoView({ block: "center", behavior: "smooth" });
     } catch (_) {}
+  }
+
+  /**
+   * Tente de remplir des champs à Shadow DOM fermé via le service worker
+   * (chrome.debugger / CDP). Les champs réellement remplis reçoivent un retour
+   * visuel ; ceux qui échouent retombent sur le surlignage + bandeau manuel.
+   *
+   * closedFields : [{ el, formcontrolname, value, label }]
+   * manualFields : champs déjà classés "manuel" (sans formcontrolname)
+   */
+  function fillClosedShadowViaCDP(closedFields, manualFields) {
+    var fallbackToManual = function (err) {
+      var manual = (manualFields || []).slice();
+      closedFields.forEach(function (f) {
+        manual.push({ label: f.label, value: f.value });
+        highlightManualField(f.el);
+      });
+      if (err) Logger.warn("CDP indisponible : " + err + " → saisie manuelle");
+      if (manual.length > 0) showManualFieldsBanner(manual);
+    };
+
+    var payloadFields = closedFields.map(function (f) {
+      return { formcontrolname: f.formcontrolname, value: f.value };
+    });
+
+    Logger.log("Tentative CDP pour " + payloadFields.length + " champ(s) shadow fermé…");
+
+    try {
+      chrome.runtime.sendMessage(
+        { type: "FILL_CLOSED_SHADOW", payload: { fields: payloadFields } },
+        function (resp) {
+          if (chrome.runtime.lastError) {
+            fallbackToManual(chrome.runtime.lastError.message);
+            return;
+          }
+          if (!resp || !resp.success) {
+            fallbackToManual(resp && resp.error);
+            return;
+          }
+
+          var failedSet = {};
+          (resp.failed || []).forEach(function (n) {
+            failedSet[n] = true;
+          });
+
+          var manual = (manualFields || []).slice();
+          closedFields.forEach(function (f) {
+            if (failedSet[f.formcontrolname]) {
+              manual.push({ label: f.label, value: f.value });
+              highlightManualField(f.el);
+            } else {
+              try {
+                showFieldFeedback(f.el);
+              } catch (_) {}
+              Logger.log("oc-input rempli via CDP : " + f.formcontrolname + " = " + f.value);
+            }
+          });
+
+          if (manual.length > 0) showManualFieldsBanner(manual);
+        }
+      );
+    } catch (e) {
+      fallbackToManual(e && e.message);
+    }
   }
 
   /**

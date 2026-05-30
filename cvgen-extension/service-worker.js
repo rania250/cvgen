@@ -7,7 +7,12 @@
  * avec des chemins simples sans ambiguïté.
  */
 
-importScripts("utils/logger.js", "utils/storage.js", "utils/api-client.js");
+importScripts(
+  "utils/logger.js",
+  "utils/storage.js",
+  "utils/api-client.js",
+  "utils/cdp-filler.js",
+);
 
 // ─── Dispatcher principal ────────────────────────────────────────────────────
 
@@ -58,6 +63,9 @@ async function handleMessage(message, sender) {
     case "AI_PREPARE":
       return handleAiPrepare(message.payload);
 
+    case "FILL_CLOSED_SHADOW":
+      return handleFillClosedShadow(message.payload, sender);
+
     default:
       Logger.warn("Type de message inconnu: " + message.type);
       return {
@@ -68,6 +76,33 @@ async function handleMessage(message, sender) {
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
+
+/**
+ * Remplit les champs verrouillés dans un Shadow DOM "closed" (ex. SmartRecruiters)
+ * via le protocole de débogage de Chrome (chrome.debugger / CDP).
+ * payload : { fields: [{ formcontrolname, value }] }
+ */
+async function handleFillClosedShadow(payload, sender) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (!tabId) {
+    return { success: false, error: "Onglet introuvable (tabId manquant)." };
+  }
+  const fields = (payload && payload.fields) || [];
+  if (!fields.length) {
+    return { success: true, filled: [], failed: [] };
+  }
+  Logger.log("CDP — remplissage de " + fields.length + " champ(s) shadow fermé…");
+  const result = await CdpFiller.fillFields(tabId, fields);
+  Logger.log(
+    "CDP — résultat : " +
+      (result.filled || []).length +
+      " rempli(s), " +
+      (result.failed || []).length +
+      " échec(s)" +
+      (result.error ? " (" + result.error + ")" : ""),
+  );
+  return result;
+}
 
 /**
  * POST /api/auth/login → stocke le token et récupère le profil utilisateur.
