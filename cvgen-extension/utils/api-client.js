@@ -46,15 +46,16 @@ async function apiFetch(endpoint, options) {
     );
   }
 
-  if (response.status === 401) {
-    Logger.warn("Token expiré ou invalide — déconnexion requise");
-    // Notifier le popup si ouvert
+  // 401 = non authentifié ; 403 = token expiré/invalide (le filtre JWT laisse
+  // passer en anonyme puis Spring renvoie 403). Dans les deux cas → reconnexion.
+  if (response.status === 401 || response.status === 403) {
+    Logger.warn("Token expiré ou invalide (" + response.status + ") — reconnexion requise");
     try {
       chrome.runtime.sendMessage({ type: "TOKEN_EXPIRED" });
     } catch (_) {
       // Popup peut être fermé — pas d'erreur
     }
-    throw new Error("Session expirée. Veuillez vous reconnecter.");
+    throw new Error("Session expirée. Reconnectez-vous dans l'extension puis réessayez.");
   }
 
   if (!response.ok) {
@@ -102,9 +103,9 @@ async function apiFetchBinary(endpoint, options) {
     throw new Error("Impossible de joindre l'API CVGen. Vérifiez votre connexion.");
   }
 
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     try { chrome.runtime.sendMessage({ type: "TOKEN_EXPIRED" }); } catch (_) {}
-    throw new Error("Session expirée. Veuillez vous reconnecter.");
+    throw new Error("Session expirée. Reconnectez-vous dans l'extension puis réessayez.");
   }
 
   if (!response.ok) {
