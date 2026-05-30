@@ -148,16 +148,20 @@ function getRadioLabel(radioEl) {
  */
 function dispatchFieldEvents(element) {
   try {
-    element.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
-    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
-    element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Tab" }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-    element.dispatchEvent(new Event("blur", { bubbles: true }));
-    element.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    // composed: true est ESSENTIEL : sans ça, les événements input/change
+    // ne franchissent pas la frontière du Shadow DOM et n'atteignent pas le
+    // ControlValueAccessor d'Angular porté par le custom element parent
+    // (cas <oc-input>/<spl-input> SmartRecruiters → la valeur "disparaît").
+    element.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, composed: true, key: "Tab" }));
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertFromPaste" }));
+    element.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, composed: true, key: "Tab" }));
+    element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
+    element.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
   } catch (_) {
     // Fallback minimal si les constructeurs ne sont pas dispo
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
+    element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
   }
 }
 
@@ -168,7 +172,7 @@ function dispatchFieldEvents(element) {
 function fillInputField(element, value) {
   try {
     element.focus();
-    element.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    element.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
 
     var descriptor = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -195,7 +199,7 @@ function fillInputField(element, value) {
 function fillTextareaField(element, value) {
   try {
     element.focus();
-    element.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    element.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
 
     var descriptor = Object.getOwnPropertyDescriptor(
       window.HTMLTextAreaElement.prototype,
