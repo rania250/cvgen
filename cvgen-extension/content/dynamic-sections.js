@@ -1046,13 +1046,19 @@ function waitForNewFields(timeoutMs, scope) {
  * @param {Object} subfields - Dictionnaire { key: [keywords] }
  * @param {Object} values    - Dictionnaire { key: valeur }
  */
-async function fillSubfields(container, subfields, values) {
+async function fillSubfields(container, subfields, values, opts) {
+  opts = opts || {};
   // Deep query : inclut les inputs dans les Shadow DOM (SmartRecruiters SPL)
   var inputs = querySelectorAllDeep(
     container, 'input:not([type="hidden"]), textarea, select'
   );
   var filled = 0;
   var DATE_KEYS = ["date_debut", "date_fin", "annee_obtention"];
+  // Cases à cocher non mappées (label vide) : candidates pour la case
+  // "Je travaille actuellement ici" / "en cours" que certains ATS
+  // (SmartRecruiters) rendent sans label exploitable.
+  var unmappedCheckboxes = [];
+  var employeurActuelHandled = false;
 
   Logger.log("fillSubfields : " + inputs.length + " input(s) détecté(s) dans le container");
 
@@ -1072,6 +1078,7 @@ async function fillSubfields(container, subfields, values) {
 
     var fieldKey = detectSubfieldType(el, subfields);
     if (!fieldKey) {
+      if (el.type === "checkbox") unmappedCheckboxes.push(el);
       Logger.log("  " + debugId + " → aucun fieldKey détecté");
       continue;
     }
@@ -1094,6 +1101,7 @@ async function fillSubfields(container, subfields, values) {
         // Checkbox "Je travaille actuellement ici", "Année en cours", etc.
         var cbOk = fillCheckboxOrRadio(el, value);
         strategy = "fillCheckboxOrRadio(" + (cbOk ? "ok" : "ECHEC") + ")";
+        if (fieldKey === "employeur_actuel" && cbOk) employeurActuelHandled = true;
         if (!cbOk) {
           Logger.log("  " + debugId + " → fieldKey=" + fieldKey + " value=" + value + " → " + strategy);
           continue;
@@ -1121,6 +1129,35 @@ async function fillSubfields(container, subfields, values) {
       Logger.log("  " + debugId + " → fieldKey=" + fieldKey + " value='" + value + "' → " + strategy);
     } catch (err) {
       Logger.error("Erreur remplissage sous-champ " + fieldKey, err);
+    }
+  }
+
+  // Heuristique "poste en cours" : si l'entrée est marquée en cours (pas de
+  // date de fin) mais qu'aucune checkbox "employeur actuel" n'a été détectée
+  // par son label (cas SmartRecruiters où la case n'a pas de label exploitable),
+  // on coche la seule case non mappée du formulaire. Sans ça, l'ATS exige la
+  // date de fin → l'entrée se remplit puis disparaît à la sauvegarde.
+  if (
+    opts.autoCheckOngoing &&
+    values.employeur_actuel === "Oui" &&
+    !employeurActuelHandled &&
+    unmappedCheckboxes.length === 1
+  ) {
+    var ongoingCb = unmappedCheckboxes[0];
+    try {
+      if (!ongoingCb.checked) {
+        var ok = fillCheckboxOrRadio(ongoingCb, "Oui");
+        if (ok) {
+          filled++;
+          showFieldFeedback(ongoingCb);
+          Logger.log(
+            "  checkbox 'en cours' (sans label) cochée par heuristique " +
+            "→ satisfait la validation date de fin manquante"
+          );
+        }
+      }
+    } catch (err) {
+      Logger.error("Erreur cochage checkbox 'en cours'", err);
     }
   }
 
@@ -1977,7 +2014,9 @@ async function fillExperienceSections(profil) {
       employeur_actuel: isCurrent ? "Oui" : "Non",
     };
 
-    var filled = await fillSubfields(container, EXPERIENCE_SUBFIELDS, values);
+    var filled = await fillSubfields(container, EXPERIENCE_SUBFIELDS, values, {
+      autoCheckOngoing: isCurrent,
+    });
     Logger.log("Expérience #" + (i + 1) + " : " + filled + " champ(s) rempli(s)");
     // Cliquer Sauvegarder pour persister l'entrée (SmartRecruiters, etc.)
     await clickSaveButton(container);
