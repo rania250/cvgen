@@ -1335,20 +1335,24 @@ async function fillSFCombobox(input, value) {
   // Succès d'ouverture → reset le compteur
   SF_COMBOBOX_FAILURES = 0;
 
-  var match = findOptionInListbox(listbox, value);
+  // 3. Chercher l'option. Les picklists SF se chargent en AJAX (DWR), souvent
+  // >1s après l'ouverture : on patiente que l'option correspondante apparaisse.
+  var found = await waitForSFOptionMatch(input, value, 2000);
+  listbox = found.listbox || listbox;
+  var match = found.match;
 
-  // 3. Si pas de match dans les options visibles, essayer de filtrer en tapant
+  // 4. Si toujours rien, filtrer en tapant puis re-patienter le chargement AJAX
   if (!match) {
     Logger.log("fillSFCombobox: tentative filtre par frappe pour '" + value + "'");
     var typedValue = value.substring(0, Math.min(value.length, 12));
     await execMainSF({ action: "typeFilter", id: inputId, value: typedValue });
-    await new Promise(function (r) { setTimeout(r, 500); });
-    listbox = (await waitForSFListbox(input, 1000)) || listbox;
-    match = findOptionInListbox(listbox, value);
+    var found2 = await waitForSFOptionMatch(input, value, 2800);
+    listbox = found2.listbox || listbox;
+    match = found2.match;
     if (!match) {
       Logger.warn(
         "fillSFCombobox: aucune option pour '" + value +
-        "' parmi " + countOptions(listbox) + " (après filtre)"
+        "' parmi " + countOptions(listbox) + " (après filtre + attente AJAX)"
       );
       try { document.body.click(); } catch (_) {}
       return false;
@@ -1482,6 +1486,48 @@ function countOptions(listbox) {
   return listbox.querySelectorAll(
     '[role="option"], li[id], li[class*="option"], [class*="picklistoption"]'
   ).length;
+}
+
+/**
+ * Localise la listbox SF actuellement ouverte (sans exiger qu'elle ait déjà des
+ * options — utile pour patienter le chargement AJAX).
+ */
+function findSFListboxNow(input) {
+  var listboxId =
+    input.getAttribute("aria-owns") || input.getAttribute("aria-controls");
+  var listbox = listboxId ? document.getElementById(listboxId) : null;
+  if (!listbox) {
+    listbox = document.querySelector(
+      '[role="listbox"]:not([aria-hidden="true"]), ' +
+      '[class*="dropdown-menu"]:not([style*="display: none"]):not([style*="display:none"]), ' +
+      '[class*="picklist-popover"]:not([aria-hidden="true"]), ' +
+      '[class*="sfPicklist"]:not([aria-hidden="true"]), ' +
+      'ul[class*="dropdown"]:not([aria-hidden="true"])'
+    );
+  }
+  return listbox;
+}
+
+/**
+ * Patiente jusqu'à ce qu'une option correspondant à `value` apparaisse dans la
+ * listbox. Les picklists SuccessFactors sont chargées en AJAX (DWR), parfois
+ * plus d'une seconde après l'ouverture/la frappe — d'où ce polling.
+ *
+ * @returns {Promise<{listbox:Element|null, match:Element|null}>}
+ */
+async function waitForSFOptionMatch(input, value, timeoutMs) {
+  var start = Date.now();
+  var lastListbox = null;
+  while (Date.now() - start < timeoutMs) {
+    var lb = findSFListboxNow(input);
+    if (lb) {
+      lastListbox = lb;
+      var m = findOptionInListbox(lb, value);
+      if (m) return { listbox: lb, match: m };
+    }
+    await new Promise(function (r) { setTimeout(r, 150); });
+  }
+  return { listbox: lastListbox, match: null };
 }
 
 /**
