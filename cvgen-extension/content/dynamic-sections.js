@@ -944,7 +944,13 @@ function clickElementRobust(el) {
   var isCustomEl = target.tagName && target.tagName.indexOf("-") > -1;
   try {
     target.focus();
-    if (isCustomEl && typeof target.click === "function") {
+    if (needMainWorld) {
+      // Bouton SAP/juic : on NE clique PAS ici. Le clic isolé (Stratégie A) ET le
+      // clic main world (Stratégie B) déclencheraient TOUS DEUX le onclick inline
+      // (juic addRow) → DOUBLE ajout d'entrée. On délègue l'unique clic au main
+      // world (Stratégie B) ci-dessous.
+      Logger.log("Stratégie A ignorée (juic détecté) — clic unique délégué au main world");
+    } else if (isCustomEl && typeof target.click === "function") {
       // .click() natif : équivalent d'un clic utilisateur, déclenche les
       // handlers attachés sur l'élément ET propage dans le shadow DOM
       // (le wrapper Web Component re-dispatch vers son <button> interne).

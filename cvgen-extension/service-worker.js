@@ -244,8 +244,14 @@ function SF_MAIN_FN(payload) {
       var el = getEl(payload);
       if (!el) return { ok: false, error: "introuvable" };
       try { el.focus(); } catch (_) {}
+      // UN SEUL déclenchement : el.click() exécute déjà le onclick inline (juic)
+      // une fois. Appeler AUSSI el.onclick(ev) ferait un double → double ajout.
+      try {
+        el.click();
+        return { ok: true };
+      } catch (_) {}
+      // Repli seulement si .click() a échoué (rare).
       callHandler(el, "onclick", new MouseEvent("click", { bubbles: true, cancelable: true }));
-      try { el.click(); } catch (_) {}
       return { ok: true };
     }
 
