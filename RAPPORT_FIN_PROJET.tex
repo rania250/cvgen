@@ -1,0 +1,596 @@
+%% =====================================================================
+%%  Rapport de fin de projet - Master 1 Informatique et Mobilite
+%%  Projet CVGen
+%%  Zakariae ABDOUNI & Rania MAMOU - Encadrant : M. Frederic Cordier
+%%  UHA - 2025/2026
+%%
+%%  Compilation : pdflatex RAPPORT_FIN_PROJET.tex (deux fois pour la
+%%  table des matieres). Le logo est optionnel (logo_uha.png/.pdf).
+%% =====================================================================
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{mathptmx}
+\usepackage[top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm,headheight=15pt]{geometry}
+\usepackage[table]{xcolor}
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+%% ─── Couleurs (avant hyperref) ───────────────────────────────────
+\definecolor{navyblue}{RGB}{31,41,55}
+\definecolor{accentblue}{RGB}{37,99,235}
+\definecolor{lightblue}{RGB}{219,234,254}
+\definecolor{rowalt}{RGB}{246,248,251}
+\definecolor{subtlegray}{RGB}{107,114,128}
+
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=navyblue, urlcolor=accentblue}
+
+\setlength{\parindent}{1em}
+\setlength{\parskip}{6pt}
+\renewcommand{\arraystretch}{1.3}
+
+\titleformat{\chapter}[display]
+  {\bfseries\color{navyblue}}
+  {\filright\large CHAPITRE \thechapter}{4pt}{\Huge}
+  [{\color{accentblue}\titlerule[1.5pt]}]
+\titlespacing*{\chapter}{0pt}{0pt}{20pt}
+\titleformat{\section}{\large\bfseries\color{navyblue}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{navyblue}}{\thesubsection}{0.6em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.8pt}
+\renewcommand{\headrule}{{\color{accentblue}\hrule width\headwidth height\headrulewidth}}
+\fancyhead[L]{\small\textbf{Projet CVGen}~\textcolor{subtlegray}{| Rapport de fin de projet}}
+\fancyfoot[C]{\small\textcolor{subtlegray}{\thepage}}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\THead}[1]{\textcolor{white}{\textbf{#1}}}
+\newcommand{\rowhead}{\rowcolor{navyblue}}
+
+%% Capture d'écran optionnelle : affiche l'image si elle existe, sinon un
+%% cadre gris indiquant le fichier à fournir. À remplacer par vos captures.
+%% Usage : \capture{largeur}{nom_fichier}{légende}{label}
+\newcommand{\capture}[4]{%
+  \begin{figure}[h]\centering
+  \IfFileExists{#2}{\fbox{\includegraphics[width=#1]{#2}}}{%
+    \fbox{\begin{minipage}[c][4.5cm][c]{#1}\centering
+      \color{subtlegray}\small\itshape
+      [ Capture d'\'ecran \`a ins\'erer ]\\[4pt]
+      \texttt{#2}
+    \end{minipage}}}%
+  \caption{#3}\label{#4}
+  \end{figure}}
+
+\begin{document}
+
+%% ═══════════════════════════════════════════════════════════════
+%% PAGE DE GARDE
+%% ═══════════════════════════════════════════════════════════════
+\begin{titlepage}
+\thispagestyle{empty}
+\centering
+
+\IfFileExists{logo_uha.png}{\includegraphics[width=6.5cm]{logo_uha.png}\par}{%
+  \IfFileExists{logo_uha.pdf}{\includegraphics[width=6.5cm]{logo_uha.pdf}\par}{%
+    {\large\bfseries\color{navyblue}Universit\'e de Haute-Alsace\par}
+    {\color{subtlegray}Facult\'e des Sciences et Techniques\par}}}
+
+\vspace{1.2cm}
+{\large\color{subtlegray}Master 1 --- Informatique et Mobilit\'e\par}
+\vspace{0.3cm}
+{\color{subtlegray}Projet de fin d'ann\'ee\par}
+
+\vspace{1.6cm}
+{\color{accentblue}\rule{\linewidth}{2pt}}\par
+\vspace{0.6cm}
+{\fontsize{46}{52}\selectfont\bfseries\color{navyblue}CVGen\par}
+\vspace{0.4cm}
+{\Large\color{navyblue}Une plateforme pour g\'en\'erer des CV\\ et postuler plus facilement en ligne\par}
+\vspace{0.6cm}
+{\color{accentblue}\rule{\linewidth}{2pt}}\par
+
+\vfill
+
+\begin{tabular}{rl}
+\textbf{R\'ealis\'e par :} & Zakariae ABDOUNI \\
+                           & Rania MAMOU \\[6pt]
+\textbf{Encadr\'e par :}   & M. Fr\'ed\'eric Cordier \\[6pt]
+\textbf{Fili\`ere :}       & Informatique et Mobilit\'e \\[6pt]
+\textbf{Ann\'ee :}         & 2025 -- 2026 \\
+\end{tabular}
+
+\vspace{1.5cm}
+\end{titlepage}
+
+%% ═══════════════════════════════════════════════════════════════
+%% REMERCIEMENTS
+%% ═══════════════════════════════════════════════════════════════
+\chapter*{Remerciements}
+\addcontentsline{toc}{chapter}{Remerciements}
+
+Nous tenons d'abord \`a remercier notre encadrant, M. Fr\'ed\'eric Cordier, pour
+ses conseils et son suivi tout au long de ce projet. Nous remercions \'egalement
+l'ensemble de l'\'equipe p\'edagogique du Master Informatique et Mobilit\'e de
+l'Universit\'e de Haute-Alsace. Enfin, ce projet a \'et\'e r\'ealis\'e en bin\^ome et
+nous avons beaucoup appris l'un de l'autre en travaillant ensemble.
+
+%% ═══════════════════════════════════════════════════════════════
+%% RÉSUMÉ
+%% ═══════════════════════════════════════════════════════════════
+\chapter*{R\'esum\'e}
+\addcontentsline{toc}{chapter}{R\'esum\'e}
+
+Ce rapport pr\'esente le projet \textbf{CVGen}, que nous avons d\'evelopp\'e dans le
+cadre de notre Master~1. L'id\'ee de d\'epart est partie d'un constat simple : quand
+on cherche un emploi ou une alternance, on passe beaucoup de temps \`a refaire son
+CV pour chaque offre et \`a ressaisir les m\^emes informations sur chaque site de
+recrutement.
+
+Pour r\'epondre \`a ce probl\`eme, nous avons construit une application compos\'ee de
+trois parties : un \textbf{serveur} (backend) qui g\`ere les comptes, les profils et
+qui fait appel \`a une intelligence artificielle pour g\'en\'erer un CV adapt\'e \`a une
+offre ; un \textbf{site web} o\`u l'utilisateur remplit son profil et g\'en\`ere ses
+documents ; et une \textbf{extension pour le navigateur Chrome} qui remplit
+automatiquement les formulaires de candidature sur les sites des entreprises.
+
+Dans la suite, nous expliquons le contexte et les objectifs, l'analyse que nous
+avons faite, la conception de l'application, les technologies que nous avons
+utilis\'ees, ce que nous avons r\'eellement r\'ealis\'e, et surtout les nombreuses
+difficult\'es que nous avons rencontr\'ees ainsi que la fa\c{c}on dont nous les avons
+r\'esolues.
+
+\vspace{4pt}
+\textbf{Mots-cl\'es :} CV, candidature, ATS, intelligence artificielle,
+Spring Boot, React, extension Chrome.
+
+\tableofcontents
+\thispagestyle{fancy}
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 1 — INTRODUCTION
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Introduction}
+
+\section{Contexte}
+Aujourd'hui, la plupart des candidatures se font en ligne. Les grandes
+entreprises utilisent des logiciels appel\'es ATS (\textit{Applicant Tracking
+System}) pour recevoir et trier automatiquement les CV. Ces logiciels lisent le
+CV, cherchent des mots-cl\'es et classent les candidats avant m\^eme qu'un recruteur
+les regarde.
+
+En tant qu'\'etudiants qui postulons r\'eguli\`erement (stages, alternances), nous
+avons remarqu\'e deux choses g\^enantes. D'une part, un CV qui n'est pas bien
+structur\'e ou qui ne contient pas les bons mots-cl\'es peut \^etre \'ecart\'e tr\`es t\^ot.
+D'autre part, chaque site de recrutement (SuccessFactors, Workday, Taleo,
+SmartRecruiters, etc.) demande de retaper encore et encore les m\^emes
+informations : nom, exp\'eriences, formations, comp\'etences\ldots C'est long et
+d\'ecourageant.
+
+\section{Probl\'ematique}
+La question \`a laquelle nous avons voulu r\'epondre est donc la suivante : comment
+aider un candidat \`a obtenir un CV adapt\'e \`a une offre pr\'ecise, et lui \'eviter de
+ressaisir tout son profil sur chaque site, sans aller \`a l'encontre des r\`egles de
+s\'ecurit\'e des navigateurs ?
+
+\section{Objectifs}
+Nous nous sommes fix\'e les objectifs suivants :
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item permettre \`a l'utilisateur de cr\'eer un profil complet (exp\'eriences,
+  formations, comp\'etences, langues, certifications, projets) ;
+  \item lui permettre d'importer un CV existant (PDF ou Word) pour gagner du
+  temps ;
+  \item g\'en\'erer un CV adapt\'e \`a une offre donn\'ee, ainsi qu'une lettre de
+  motivation ;
+  \item donner un score de compatibilit\'e avec l'offre (score ATS) avec des
+  conseils ;
+  \item remplir automatiquement les formulaires de candidature gr\^ace \`a
+  l'extension, et y d\'eposer le CV et la lettre.
+\end{itemize}
+
+\section{Plan du rapport}
+Apr\`es cette introduction, le chapitre~2 pr\'esente l'application dans son
+ensemble. Le chapitre~3 d\'ecrit les besoins. Le chapitre~4 explique la conception
+et l'architecture. Le chapitre~5 liste les technologies. Le chapitre~6 d\'etaille
+ce que nous avons r\'ealis\'e. Le chapitre~7 revient sur les difficult\'es
+rencontr\'ees. Le chapitre~8 parle des tests et de l'organisation, et le
+chapitre~9 conclut avec le bilan et les pistes d'am\'elioration.
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 2 — PRÉSENTATION
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Pr\'esentation du projet}
+
+\section{Vue d'ensemble}
+CVGen est compos\'e de trois parties qui communiquent entre elles autour d'une
+m\^eme API :
+\begin{itemize}[leftmargin=1.4em, itemsep=3pt]
+  \item \textbf{le backend} : c'est la partie centrale. Il g\`ere les comptes, le
+  profil, les appels \`a l'IA et la cr\'eation des documents ;
+  \item \textbf{le site web} : c'est l\`a que l'utilisateur cr\'ee son compte,
+  remplit son profil, g\'en\`ere ses CV et regarde son score ATS ;
+  \item \textbf{l'extension Chrome} : elle travaille directement dans le
+  navigateur, sur la page de candidature, pour remplir le formulaire \`a partir du
+  profil.
+\end{itemize}
+
+\section{Qui utilise l'application}
+L'utilisateur principal est le candidat. En pratique, il cr\'ee un compte, remplit
+son profil (ou l'importe depuis un ancien CV), g\'en\`ere un CV pour une offre,
+regarde son score, t\'el\'echarge le PDF, puis va sur le site de l'entreprise et
+laisse l'extension remplir le formulaire \`a sa place.
+
+\capture{0.85\linewidth}{captures/accueil.png}{Page d'accueil du site CVGen.}{fig:accueil}
+
+\section{Ce que fait l'application}
+Le tableau~\ref{tab:perimetre} r\'esume les fonctionnalit\'es que nous avons mises
+en place.
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\linewidth}{L{4.2cm}X}
+\toprule
+\rowhead \THead{Partie} & \THead{Ce qu'elle permet} \\
+\midrule
+\rowcolor{rowalt} Compte & Inscription, connexion (avec jetons de session). \\
+Profil & Ajouter / modifier / supprimer ses exp\'eriences, formations, comp\'etences, langues, certifications et projets. \\
+\rowcolor{rowalt} Import de CV & Lire un CV PDF ou Word et remplir le profil automatiquement. \\
+G\'en\'eration & Cr\'eer un CV adapt\'e \`a une offre et une lettre de motivation, puis exporter en PDF. \\
+\rowcolor{rowalt} Score ATS & Donner une note sur 100, les mots-cl\'es trouv\'es ou manquants, et des conseils. \\
+Extension & Remplir les formulaires des sites de recrutement et y d\'eposer les documents. \\
+\bottomrule
+\end{tabularx}
+\caption{R\'esum\'e des fonctionnalit\'es.}
+\label{tab:perimetre}
+\end{table}
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 3 — BESOINS
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Analyse des besoins}
+
+Avant de coder, nous avons list\'e ce dont l'application avait besoin, en
+s\'eparant les besoins fonctionnels (ce qu'elle doit faire) des besoins non
+fonctionnels (comment elle doit le faire).
+
+\section{Besoins fonctionnels}
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item cr\'eer un compte et se connecter de fa\c{c}on s\'ecuris\'ee ;
+  \item g\'erer un profil professionnel complet ;
+  \item importer un CV pour pr\'e-remplir le profil ;
+  \item g\'en\'erer un CV adapt\'e \`a une offre ;
+  \item g\'en\'erer une lettre de motivation ;
+  \item calculer un score ATS avec des conseils ;
+  \item exporter les documents en PDF ;
+  \item remplir automatiquement les formulaires et y joindre les documents.
+\end{itemize}
+
+\section{Besoins non fonctionnels}
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item \textbf{S\'ecurit\'e} : les mots de passe ne doivent jamais \^etre stock\'es en
+  clair, et l'API doit \^etre prot\'eg\'ee.
+  \item \textbf{Rapidit\'e} : la g\'en\'eration et le remplissage doivent rester
+  rapides pour ne pas \^etre p\'enibles.
+  \item \textbf{Robustesse} : l'IA renvoie parfois des r\'esultats bizarres, il
+  faut que l'application ne plante pas pour autant.
+  \item \textbf{Compatibilit\'e} : les sites de recrutement sont tous diff\'erents,
+  l'extension doit s'adapter \`a beaucoup de cas.
+  \item \textbf{Code clair} : nous voulions un code organis\'e pour pouvoir le
+  reprendre et le faire \'evoluer.
+\end{itemize}
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 4 — CONCEPTION
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Conception et architecture}
+
+\section{Architecture g\'en\'erale}
+L'application suit une organisation classique client--serveur. Le site web et
+l'extension sont les clients, et ils discutent tous les deux avec le m\^eme
+serveur (l'API REST). Le serveur, lui, parle \`a la base de donn\'ees et \`a l'IA. La
+figure~\ref{fig:archi} montre comment tout cela s'articule.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  node distance=0.9cm and 1.4cm,
+  box/.style={rectangle, rounded corners, draw=navyblue, fill=lightblue,
+              text width=3.2cm, align=center, minimum height=1.2cm, font=\small},
+  ext/.style={rectangle, rounded corners, draw=accentblue, fill=white,
+              text width=3.2cm, align=center, minimum height=1.2cm, font=\small},
+  db/.style={cylinder, shape border rotate=90, aspect=0.3, draw=navyblue,
+             fill=rowalt, minimum height=1.4cm, minimum width=2.2cm, align=center, font=\small},
+  arr/.style={-{Stealth[length=2mm]}, thick, draw=subtlegray}
+]
+  \node[box] (web) {Site web\\ \scriptsize React};
+  \node[ext, below=of web] (chrome) {Extension Chrome};
+  \node[box, right=2.2cm of web, yshift=-0.9cm, fill=navyblue, text=white] (api)
+       {Backend\\ \scriptsize API REST + JWT};
+  \node[db, right=of api] (pg) {PostgreSQL};
+  \node[ext, above=of api, fill=lightblue, draw=navyblue] (gem)
+       {IA Gemini};
+  \node[ext, below=1.2cm of api] (ats) {Sites ATS\\ \scriptsize (recruteurs)};
+
+  \draw[arr] (web) -- (api);
+  \draw[arr] (chrome) -- (api);
+  \draw[arr] (api) -- (pg);
+  \draw[arr] (api) -- (gem);
+  \draw[arr] (chrome) -- (ats) node[midway, left, font=\scriptsize] {remplissage};
+\end{tikzpicture}
+\caption{Sch\'ema g\'en\'eral de l'application.}
+\label{fig:archi}
+\end{figure}
+
+\section{Le backend}
+Nous avons d\'ecoup\'e le backend par \og domaines \fg{}, c'est-\`a-dire par grandes
+fonctionnalit\'es : l'authentification, le profil, la g\'en\'eration et le score ATS.
+Chaque domaine est lui-m\^eme s\'epar\'e en trois couches : les contr\^oleurs (qui
+re\c{c}oivent les requ\^etes), les services (qui contiennent la logique), et la partie
+technique (base de donn\'ees, s\'ecurit\'e, appel \`a l'IA). Nous avons choisi cette
+organisation pour que le code reste lisible et que chaque partie ait une
+responsabilit\'e claire.
+
+Un point important : nous ne renvoyons jamais directement les objets de la base
+de donn\'ees au client. Nous passons toujours par des objets interm\'ediaires (DTO)
+et une r\'eponse au format uniforme, ce qui \'evite d'exposer des informations
+sensibles.
+
+\section{La base de donn\'ees}
+Les donn\'ees sont stock\'ees dans PostgreSQL, et nous utilisons des fichiers de
+migration (Flyway) pour cr\'eer et faire \'evoluer les tables. Le
+tableau~\ref{tab:entites} pr\'esente les principales tables.
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\linewidth}{L{3.6cm}X}
+\toprule
+\rowhead \THead{Table} & \THead{Contenu} \\
+\midrule
+\rowcolor{rowalt} Utilisateurs & Comptes (email, mot de passe chiffr\'e, r\^ole). \\
+Profils & Le profil li\'e \`a chaque utilisateur. \\
+\rowcolor{rowalt} Exp\'eriences / Formations & Le parcours professionnel et scolaire. \\
+Comp\'etences / Langues & Comp\'etences (avec niveau) et langues. \\
+\rowcolor{rowalt} Certifications / Projets & Certifications et projets personnels. \\
+CV g\'en\'er\'es & Les CV cr\'e\'es par l'IA. \\
+\bottomrule
+\end{tabularx}
+\caption{Principales tables de la base.}
+\label{tab:entites}
+\end{table}
+
+\section{L'intelligence artificielle}
+C'est la partie qui nous a le plus int\'eress\'es. Nous utilisons le mod\`ele de
+Google, \textbf{Gemini}, \`a travers son API. Pour ne pas r\'ep\'eter le m\^eme code
+partout, nous avons cr\'e\'e un seul \og point d'entr\'ee \fg{} vers l'IA, qui g\`ere les
+appels, les erreurs et les limites d'usage. Ensuite, quatre fonctionnalit\'es
+l'utilisent :
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item la \textbf{g\'en\'eration de CV} : on envoie \`a l'IA l'offre et le profil, et
+  elle choisit puis reformule les \'el\'ements les plus pertinents ;
+  \item la \textbf{lettre de motivation} : l'IA r\'edige une lettre personnalis\'ee ;
+  \item le \textbf{score ATS} : l'IA compare le CV \`a l'offre et donne une note avec
+  des mots-cl\'es et des conseils ;
+  \item l'\textbf{import de CV} : l'IA transforme le texte brut d'un ancien CV en
+  donn\'ees rang\'ees dans le profil.
+\end{itemize}
+
+Un probl\`eme que nous avons vite rencontr\'e : l'IA ne renvoie pas toujours un
+texte propre (elle ajoute parfois des virgules en trop ou des balises). Nous
+avons donc \'ecrit un petit outil pour nettoyer ses r\'eponses avant de les lire.
+
+\section{La s\'ecurit\'e}
+Pour la connexion, nous utilisons des jetons JWT. \`A la connexion, l'utilisateur
+re\c{c}oit un jeton de courte dur\'ee et un jeton de rafra\^ichissement plus long. \`A
+chaque requ\^ete, le serveur v\'erifie le jeton. Les mots de passe sont chiffr\'es
+avec BCrypt et seuls le site web et l'extension sont autoris\'es \`a appeler l'API.
+
+\section{L'extension Chrome}
+L'extension respecte la derni\`ere version du format des extensions
+(Manifest~V3). Elle est compos\'ee d'un programme de fond (\textit{service
+worker}), de scripts inject\'es dans les pages des sites de recrutement, et d'une
+petite fen\^etre (popup) pour la piloter. Les scripts inject\'es sont s\'epar\'es selon
+leur r\^ole : d\'etecter les champs, faire la correspondance avec le profil, remplir,
+g\'erer les sections r\'ep\'etables, les dates, l'extraction de l'offre et l'envoi des
+fichiers.
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 5 — TECHNOLOGIES
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Technologies utilis\'ees}
+
+Le tableau~\ref{tab:techno} regroupe les principales technologies que nous avons
+utilis\'ees. Nous avons essay\'e de choisir des outils r\'epandus, bien document\'es,
+que nous pouvions apprendre dans le temps imparti.
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\linewidth}{L{3.4cm}X}
+\toprule
+\rowhead \THead{Cat\'egorie} & \THead{Technologies} \\
+\midrule
+\rowcolor{rowalt} Backend & Java 17, Spring Boot, Maven. \\
+Base de donn\'ees & PostgreSQL, Flyway. \\
+\rowcolor{rowalt} IA & Google Gemini (via son API). \\
+Documents & Apache PDFBox et Apache POI (lecture des CV), g\'en\'eration de PDF. \\
+\rowcolor{rowalt} S\'ecurit\'e & JWT, BCrypt, Spring Security. \\
+Site web & React, TypeScript, Vite, Tailwind CSS. \\
+\rowcolor{rowalt} Extension & Chrome Manifest V3, JavaScript. \\
+Outils & Docker, Git, GitHub Actions. \\
+\bottomrule
+\end{tabularx}
+\caption{Technologies du projet.}
+\label{tab:techno}
+\end{table}
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 6 — RÉALISATION
+%% ═══════════════════════════════════════════════════════════════
+\chapter{R\'ealisation}
+
+\section{Le backend}
+Nous avons d\'evelopp\'e l'API morceau par morceau. D'abord l'authentification
+(inscription, connexion), puis la gestion du profil avec toutes ses
+sous-parties, ensuite l'import de CV, et enfin la g\'en\'eration et le score ATS.
+Nous avons aussi ajout\'e une page de documentation automatique de l'API pour
+nous y retrouver, et un endroit unique qui g\`ere les erreurs afin de renvoyer des
+messages clairs (par exemple quand l'IA a atteint sa limite d'utilisation).
+
+\section{Le site web}
+Le site permet de s'inscrire, de se connecter, de remplir son profil (avec une
+petite barre qui indique le pourcentage de compl\'etion), d'importer un CV via une
+fen\^etre d\'edi\'ee, et enfin de g\'en\'erer un CV pour une offre puis de voir son score
+ATS et de t\'el\'echarger le PDF. Nous avons soign\'e l'interface pour qu'elle reste
+simple \`a utiliser.
+
+\capture{0.85\linewidth}{captures/profil.png}{\'Edition du profil sur le site web.}{fig:profil}
+
+\capture{0.85\linewidth}{captures/score_ats.png}{Affichage du score ATS apr\`es g\'en\'eration d'un CV.}{fig:ats}
+
+\section{L'extension Chrome}
+C'est la partie la plus difficile techniquement, et celle sur laquelle nous avons
+pass\'e le plus de temps. L'extension sait :
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item rep\'erer et remplir les champs sur de nombreux sites de recrutement, en
+  reconnaissant les champs gr\^ace \`a leurs libell\'es ;
+  \item g\'erer les sections que l'on peut ajouter plusieurs fois (plusieurs
+  exp\'eriences, plusieurs formations\ldots) en cliquant toute seule sur les
+  boutons \og Ajouter \fg{} ;
+  \item s'adapter aux composants compliqu\'es de certains sites (par exemple les
+  listes d\'eroulantes de SuccessFactors) ;
+  \item d\'eposer automatiquement le CV et la lettre dans les champs de fichier.
+\end{itemize}
+
+\capture{0.55\linewidth}{captures/extension_popup.png}{La fen\^etre (popup) de l'extension Chrome.}{fig:popup}
+
+\capture{0.85\linewidth}{captures/formulaire_rempli.png}{Exemple de formulaire de candidature rempli automatiquement par l'extension.}{fig:rempli}
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 7 — DIFFICULTÉS
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Difficult\'es rencontr\'ees}
+
+Cette partie est sans doute la plus int\'eressante, car c'est l\`a que nous avons le
+plus appris. Nous d\'ecrivons les principaux probl\`emes et comment nous nous en
+sommes sortis.
+
+\section{Les \'ev\'enements \og non humains \fg{}}
+Pour des raisons de s\'ecurit\'e, les navigateurs marquent tout ce qui est fait par
+un script comme \og non humain \fg{}. Certains sites (comme SuccessFactors) refusent
+alors le remplissage de leurs listes d\'eroulantes. Nous avons d\^u tester
+plusieurs m\'ethodes pour contourner cela, et quand vraiment aucune ne marchait,
+nous avons choisi de surligner en orange les champs \`a finir \`a la main plut\^ot que
+de laisser l'utilisateur dans le flou.
+
+\section{Les champs cach\'es (Shadow DOM ferm\'e)}
+Sur certains sites (SmartRecruiters), les champs sont enferm\'es dans une zone
+inaccessible aux scripts normaux. Apr\`es pas mal de recherches, nous avons fini
+par utiliser un outil plus puissant fourni par Chrome pour \og atteindre \fg{} ces
+champs et y \'ecrire caract\`ere par caract\`ere, comme le ferait une vraie personne.
+
+\section{Les champs qui se remplissent puis disparaissent}
+C'est le probl\`eme qui nous a le plus \'enerv\'es. Sur certains sites, on voyait le
+champ se remplir, puis se vider tout seul, ou l'entr\'ee dispara\^itre au moment de
+sauvegarder. Nous avons compris qu'il fallait remplir en plusieurs fois, bien
+envoyer les \'ev\'enements, et parfois cocher automatiquement une case (par exemple
+\og poste en cours \fg{}) pour que le site accepte une exp\'erience sans date de fin.
+
+\section{Les r\'eponses de l'IA}
+L'IA ne donne pas toujours un r\'esultat parfait : parfois le texte n'est pas un
+JSON valide, parfois le CV n'est pas assez adapt\'e \`a l'offre. Nous avons am\'elior\'e
+nos consignes (le \og prompt \fg{}), nettoy\'e les r\'eponses, et fait en sorte que le
+remplissage du formulaire continue m\^eme si la g\'en\'eration \'echoue, pour ne pas
+tout bloquer.
+
+\section{Les limites de l'API gratuite}
+Comme nous utilisons la version gratuite de l'IA, nous \'etions souvent bloqu\'es
+par des limites d'utilisation. Nous avons ajout\'e des nouvelles tentatives
+automatiques et des messages d'erreur clairs pour comprendre ce qui se passait.
+
+\section{Le vocabulaire diff\'erent selon les sites}
+Un m\^eme niveau ne s'\'ecrit pas pareil partout : un niveau de langue \og Bon \fg{}
+dans notre profil correspond \`a \og Avanc\'e \fg{} sur un site, et \og Bac+5 \fg{}
+correspond ailleurs \`a \og Bac~+4/+5 \fg{}. Nous avons cr\'e\'e une petite table de
+correspondances pour traduire automatiquement nos valeurs vers celles attendues
+par chaque site.
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 8 — TESTS ET ORGANISATION
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Tests et organisation du travail}
+
+\section{Comment nous avons test\'e}
+Nous avons surtout test\'e \og \`a la main \fg{}, en essayant l'application sur de vrais
+formulaires de candidature. Pour comprendre les bugs de l'extension, nous avons
+ajout\'e beaucoup de messages dans la console (pr\'efix\'es par \texttt{[CVGen]}), ce
+qui nous a permis de voir exactement o\`u \c{c}a coin\c{c}ait \`a chaque essai. C'est
+gr\^ace \`a ces messages que nous avons pu corriger la plupart des probl\`emes du
+chapitre pr\'ec\'edent. Nous avons aussi mis en place une int\'egration continue
+(GitHub Actions) qui v\'erifie que le projet compile bien \`a chaque modification.
+
+\section{R\'epartition du travail}
+Nous avons travaill\'e en bin\^ome, en avan\c{c}ant par \og sprints \fg{} d'une semaine.
+La r\'epartition s'est faite naturellement :
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item \textbf{Zakariae} s'est occup\'e surtout du backend (base de donn\'ees,
+  s\'ecurit\'e, IA, g\'en\'eration, score ATS) et du site web ;
+  \item \textbf{Rania} s'est occup\'ee de l'extension Chrome (remplissage des
+  formulaires, sections dynamiques, envoi des documents) et de la liaison avec
+  l'API.
+\end{itemize}
+Nous avons utilis\'e Git pour travailler chacun de notre c\^ot\'e sans nous g\^ener, et
+nous \'ecrivions un petit rapport chaque semaine pour suivre l'avancement.
+
+%% ═══════════════════════════════════════════════════════════════
+%% CHAPITRE 9 — BILAN
+%% ═══════════════════════════════════════════════════════════════
+\chapter{Bilan et perspectives}
+
+\section{Bilan}
+Au final, nous sommes plut\^ot contents du r\'esultat. L'application fait ce que
+nous voulions : on peut cr\'eer son profil, importer un CV, g\'en\'erer un CV adapt\'e \`a
+une offre, voir un score ATS et laisser l'extension remplir les formulaires. Tout
+n'est pas parfait, mais l'essentiel fonctionne et l'extension marche sur une
+douzaine de sites de recrutement.
+
+\section{Ce que nous avons appris}
+Ce projet nous a fait progresser sur beaucoup de points :
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item organiser un projet et s\'eparer le code proprement ;
+  \item utiliser une IA dans une application (et g\'erer ses d\'efauts) ;
+  \item d\'evelopper \`a la fois c\^ot\'e serveur (Java/Spring) et c\^ot\'e site
+  (React) ;
+  \item programmer une extension de navigateur, ce que nous n'avions jamais
+  fait ;
+  \item travailler \`a deux avec Git sans \'ecraser le travail de l'autre.
+\end{itemize}
+
+\section{Ce qu'on pourrait am\'eliorer}
+Il reste des choses \`a faire si nous avions plus de temps :
+\begin{itemize}[leftmargin=1.4em, itemsep=2pt]
+  \item ajouter de vrais tests automatiques (nous avons surtout test\'e \`a la
+  main) ;
+  \item cr\'eer un tableau de bord pour suivre les candidatures envoy\'ees ;
+  \item proposer plusieurs mod\`eles de CV ;
+  \item supporter encore plus de sites de recrutement ;
+  \item g\'erer d'autres langues que le fran\c{c}ais.
+\end{itemize}
+
+\section{Conclusion}
+Ce projet nous a permis de partir d'un vrai besoin (postuler plus facilement) et
+d'aller jusqu'\`a une application qui fonctionne, en passant par toutes les \'etapes :
+r\'efl\'echir au probl\`eme, concevoir, coder, tester et corriger. Nous avons surtout
+appris en nous confrontant \`a des probl\`emes concrets, parfois fastidieux, mais
+toujours formateurs. C'est une exp\'erience que nous garderons pour la suite de nos
+\'etudes et de notre vie professionnelle.
+
+\end{document}
