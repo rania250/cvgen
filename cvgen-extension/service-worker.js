@@ -69,6 +69,9 @@ async function handleMessage(message, sender) {
     case "FETCH_SR_POSTING":
       return handleFetchSrPosting(message.payload);
 
+    case "EXEC_MAIN_SF":
+      return handleExecMainSf(message.payload, sender);
+
     default:
       Logger.warn("Type de message inconnu: " + message.type);
       return {
@@ -180,6 +183,124 @@ async function handleFillClosedShadow(payload, sender) {
     Logger.log("CDP détail — " + d);
   });
   return result;
+}
+
+/**
+ * Exécute une opération SuccessFactors dans le MAIN world via chrome.scripting,
+ * qui N'EST PAS soumis à la CSP de la page (contrairement à l'injection d'un
+ * <script> inline, bloquée par les CSP strictes type Capgemini).
+ *
+ * On n'utilise jamais eval : pour déclencher les handlers SAP/juic, on appelle
+ * directement la propriété handler de l'élément (el.onclick / el.onblur / ...).
+ *
+ * payload : { action, id?, btnId?, token?, value? }
+ */
+async function handleExecMainSf(payload, sender) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (!tabId) {
+    return { success: false, error: "Onglet introuvable (tabId manquant)." };
+  }
+  const frameId = sender && typeof sender.frameId === "number" ? sender.frameId : 0;
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId, frameIds: [frameId] },
+      world: "MAIN",
+      func: SF_MAIN_FN,
+      args: [payload || {}],
+    });
+    const value = results && results[0] ? results[0].result : null;
+    return { success: true, result: value };
+  } catch (err) {
+    return { success: false, error: err && err.message ? err.message : String(err) };
+  }
+}
+
+/**
+ * Fonction sérialisée puis exécutée DANS le MAIN world de la page (donc avec
+ * accès à juic, jQuery, etc.). Doit être autonome (aucune référence externe).
+ */
+function SF_MAIN_FN(payload) {
+  try {
+    function byId(id) { return id ? document.getElementById(id) : null; }
+    function byToken(t) { return t ? document.querySelector('[data-cvgen-mw="' + t + '"]') : null; }
+    function getEl(p) { return byId(p.id) || byToken(p.token); }
+    function nativeSet(el, val) {
+      var proto = el.tagName === "TEXTAREA"
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+      var d = Object.getOwnPropertyDescriptor(proto, "value");
+      if (d && d.set) { d.set.call(el, val); } else { el.value = val; }
+    }
+    function callHandler(el, name, ev) {
+      try {
+        if (typeof el[name] === "function") { el[name](ev); return true; }
+      } catch (_) {}
+      return false;
+    }
+
+    var a = payload.action;
+
+    if (a === "click") {
+      var el = getEl(payload);
+      if (!el) return { ok: false, error: "introuvable" };
+      try { el.focus(); } catch (_) {}
+      callHandler(el, "onclick", new MouseEvent("click", { bubbles: true, cancelable: true }));
+      try { el.click(); } catch (_) {}
+      return { ok: true };
+    }
+
+    if (a === "setValueBlur") {
+      var el2 = getEl(payload);
+      if (!el2) return { ok: false, error: "introuvable" };
+      try { el2.focus(); } catch (_) {}
+      nativeSet(el2, payload.value);
+      try { el2.setAttribute("title", payload.value); } catch (_) {}
+      el2.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+      el2.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+      callHandler(el2, "onblur", new FocusEvent("blur", { bubbles: true, relatedTarget: document.body }));
+      el2.dispatchEvent(new FocusEvent("blur", { bubbles: true, cancelable: true, relatedTarget: document.body }));
+      el2.dispatchEvent(new Event("focusout", { bubbles: true, cancelable: true }));
+      try { if (document.activeElement === el2) el2.blur(); } catch (_) {}
+      return { ok: true, value: el2.value, title: el2.getAttribute("title") || "" };
+    }
+
+    if (a === "typeFilter") {
+      var el3 = getEl(payload);
+      if (!el3) return { ok: false, error: "introuvable" };
+      try { el3.focus(); } catch (_) {}
+      nativeSet(el3, payload.value);
+      el3.dispatchEvent(new Event("input", { bubbles: true }));
+      el3.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "a", keyCode: 65 }));
+      return { ok: true };
+    }
+
+    if (a === "openCombobox") {
+      var input = byId(payload.id);
+      if (!input) return { ok: false, error: "introuvable" };
+      try { input.focus(); } catch (_) {}
+      var btn = payload.btnId ? document.getElementById(payload.btnId) : null;
+      if (btn) {
+        callHandler(btn, "onclick", new MouseEvent("click", { bubbles: true }));
+        try { btn.click(); } catch (_) {}
+      }
+      try {
+        var kd = new KeyboardEvent("keydown", {
+          bubbles: true, cancelable: true, key: "ArrowDown", code: "ArrowDown", keyCode: 40, which: 40,
+        });
+        Object.defineProperty(kd, "keyCode", { get: function () { return 40; } });
+        Object.defineProperty(kd, "which", { get: function () { return 40; } });
+        input.dispatchEvent(kd);
+      } catch (_) {}
+      callHandler(input, "onkeydown", new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown", keyCode: 40 }));
+      callHandler(input, "onclick", new MouseEvent("click", { bubbles: true }));
+      try { input.click(); } catch (_) {}
+      return { ok: true };
+    }
+
+    return { ok: false, error: "action inconnue : " + a };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
 }
 
 /**

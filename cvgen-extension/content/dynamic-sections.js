@@ -860,6 +860,48 @@ function jsStringLit(s) {
   return JSON.stringify(String(s == null ? "" : s));
 }
 
+// Marque un élément avec un jeton unique pour le retrouver depuis le MAIN world
+// (les deux worlds partagent le DOM, donc l'attribut est visible des deux côtés).
+var MW_SEQ = 0;
+function tagMW(el) {
+  try {
+    var t = "cv" + (++MW_SEQ) + "_" + Date.now();
+    el.setAttribute("data-cvgen-mw", t);
+    return t;
+  } catch (_) {
+    return "";
+  }
+}
+
+/**
+ * Exécute une opération SuccessFactors dans le MAIN world via le service worker
+ * (chrome.scripting.executeScript, world:"MAIN"). Contrairement à
+ * execInMainWorld (injection d'un <script> inline), ceci N'EST PAS bloqué par
+ * la CSP stricte de la page (ex. Capgemini). Aucun eval n'est utilisé : les
+ * handlers juic/SAP sont déclenchés via les propriétés handler de l'élément.
+ *
+ * @param {{action:string,id?:string,btnId?:string,token?:string,value?:string}} payload
+ * @returns {Promise<{ok:boolean,error?:string,value?:string,title?:string}>}
+ */
+function execMainSF(payload) {
+  return new Promise(function (resolve) {
+    try {
+      chrome.runtime.sendMessage(
+        { type: "EXEC_MAIN_SF", payload: payload },
+        function (resp) {
+          if (chrome.runtime.lastError) {
+            resolve({ ok: false, error: chrome.runtime.lastError.message });
+            return;
+          }
+          resolve((resp && resp.result) || { ok: !!(resp && resp.success) });
+        }
+      );
+    } catch (e) {
+      resolve({ ok: false, error: e.message });
+    }
+  });
+}
+
 function clickElementRobust(el) {
   if (!el) return;
 
@@ -923,19 +965,12 @@ function clickElementRobust(el) {
   // depuis l'isolated world des content scripts.
   if (needMainWorld) {
     if (btnId) {
-      Logger.log("Stratégie B : exécution dans le main world (juic.fire détecté)");
-      execInMainWorld(
-        "(function(){try{" +
-          "var b=document.getElementById(" + jsStringLit(btnId) + ");" +
-          "if(b){b.focus();b.click();}" +
-        "}catch(e){console.warn('[CVGen MAIN] click failed',e);}}())"
-      );
+      Logger.log("Stratégie B : clic main world via chrome.scripting (juic détecté)");
+      execMainSF({ action: "click", id: btnId });
     } else {
-      Logger.log("Stratégie B : éval du onclick inline (pas d'id)");
-      execInMainWorld(
-        "(function(){try{(function(event){" + onclickAttr + "})(new MouseEvent('click'));}" +
-        "catch(e){console.warn('[CVGen MAIN] onclick eval failed',e);}}())"
-      );
+      Logger.log("Stratégie B : déclenchement du handler onclick (pas d'id)");
+      var mwTok = tagMW(target);
+      execMainSF({ action: "click", token: mwTok });
     }
   }
 }
@@ -1306,16 +1341,7 @@ async function fillSFCombobox(input, value) {
   if (!match) {
     Logger.log("fillSFCombobox: tentative filtre par frappe pour '" + value + "'");
     var typedValue = value.substring(0, Math.min(value.length, 12));
-    execInMainWorld(
-      "(function(){try{" +
-        "var i=document.getElementById(" + jsStringLit(inputId) + ");" +
-        "if(i){" +
-          "i.focus();" +
-          "i.value=" + jsStringLit(typedValue) + ";" +
-          "i.dispatchEvent(new Event('input',{bubbles:true}));" +
-          "i.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,key:'a',keyCode:65}));" +
-          "}}catch(e){console.warn('[CVGen MAIN] type combobox failed',e);}}())"
-    );
+    await execMainSF({ action: "typeFilter", id: inputId, value: typedValue });
     await new Promise(function (r) { setTimeout(r, 500); });
     listbox = (await waitForSFListbox(input, 1000)) || listbox;
     match = findOptionInListbox(listbox, value);
@@ -1331,10 +1357,7 @@ async function fillSFCombobox(input, value) {
 
   // 4. Cliquer l'option (main world)
   if (match.id) {
-    execInMainWorld(
-      "(function(){try{var o=document.getElementById(" + jsStringLit(match.id) + ");" +
-      "if(o){o.click();}}catch(e){console.warn('[CVGen MAIN] option click failed',e);}}())"
-    );
+    await execMainSF({ action: "click", id: match.id });
   } else {
     try { match.click(); } catch (_) {}
   }
@@ -1364,32 +1387,9 @@ async function trySetSFComboboxDirect(input, value) {
     return { accepted: false, currentValue: "", currentTitle: "", ariaInvalid: "" };
   }
 
-  var litVal = jsStringLit(value);
-  var litId = jsStringLit(inputId);
-
-  // Exécuter dans le main world : on a accès au setter natif ET aux handlers juic
-  execInMainWorld(
-    "(function(){try{" +
-      "var i=document.getElementById(" + litId + ");" +
-      "if(!i)return;" +
-      "i.focus();" +
-      // Utiliser le setter natif pour bypasser tout setter React-like
-      "var d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');" +
-      "if(d&&d.set){d.set.call(i," + litVal + ");}else{i.value=" + litVal + ";}" +
-      // Mettre aussi title (SF affiche souvent title comme placeholder/valeur)
-      "i.setAttribute('title'," + litVal + ");" +
-      // Events de saisie standard
-      "i.dispatchEvent(new Event('input',{bubbles:true,cancelable:true}));" +
-      "i.dispatchEvent(new Event('change',{bubbles:true,cancelable:true}));" +
-      // Déclencher onblur : SF a typiquement onblur='juic.fire(\"X:\",\"_onBlur\",event)'
-      "var ob=i.getAttribute('onblur');" +
-      "if(ob){try{(function(event){eval(ob);})(new FocusEvent('blur',{bubbles:true,relatedTarget:document.body}));}catch(_){}}" +
-      "i.dispatchEvent(new FocusEvent('blur',{bubbles:true,cancelable:true,relatedTarget:document.body}));" +
-      "i.dispatchEvent(new Event('focusout',{bubbles:true,cancelable:true}));" +
-      // Retirer le focus
-      "if(document.activeElement===i){i.blur();}" +
-    "}catch(e){console.warn('[CVGen MAIN] direct set combobox failed',e);}}())"
-  );
+  // Exécuter dans le main world (chrome.scripting, hors CSP de la page) :
+  // setter natif + events + déclenchement du handler onblur (juic._onBlur).
+  await execMainSF({ action: "setValueBlur", id: inputId, value: value });
 
   // Attendre que SF traite le _onBlur (court car SF revert très vite quand il refuse)
   await new Promise(function (r) { setTimeout(r, 120); });
@@ -1434,52 +1434,16 @@ async function trySetSFComboboxDirect(input, value) {
  */
 async function openSFCombobox(input) {
   var inputId = input.getAttribute("id") || "";
-  var onclickAttr = input.getAttribute("onclick") || "";
-  var onkeydownAttr = input.getAttribute("onkeydown") || "";
   var btnId = inputId ? inputId.replace(/_input$/, "_selectButton") : "";
   var btnEl = btnId && btnId !== inputId ? document.getElementById(btnId) : null;
-  var btnOnclick = btnEl ? (btnEl.getAttribute("onclick") || "") : "";
 
   if (!inputId) return;
 
-  // Stratégie combinée : exécutée dans le main world en un seul payload pour
-  // éviter les délais de plusieurs round-trips. On essaie successivement :
-  //  (a) eval onclick du _selectButton voisin
-  //  (b) eval onclick de l'input
-  //  (c) dispatch ArrowDown (les comboboxes ARIA accessibles s'ouvrent souvent
-  //      ainsi, et SF a typiquement onkeydown="juic.fire(...)")
-  //  (d) eval onkeydown directement
-  //  (e) .focus() + .click() sur le button puis l'input
+  // Ouverture via le MAIN world (chrome.scripting, hors CSP) : focus + clic du
+  // _selectButton voisin (handler onclick juic) + ArrowDown + handlers
+  // onkeydown/onclick de l'input. Aucun eval (handlers appelés par propriété).
   Logger.log("openSFCombobox: tentative pour " + inputId);
-  var script =
-    "(function(){try{" +
-      "var input = document.getElementById(" + jsStringLit(inputId) + ");" +
-      "if(!input) return;" +
-      "input.focus();" +
-      (btnId && btnEl
-        ? "var btn = document.getElementById(" + jsStringLit(btnId) + ");" +
-          (btnOnclick
-            ? "try{(function(event){" + btnOnclick + "})(new MouseEvent('click',{bubbles:true}));}catch(_){}"
-            : "") +
-          "try{btn&&btn.click();}catch(_){}"
-        : "") +
-      // ArrowDown au cas où SF écoute keydown pour ouvrir
-      "try{var kd=new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:'ArrowDown',code:'ArrowDown',keyCode:40,which:40});" +
-        "Object.defineProperty(kd,'keyCode',{get:function(){return 40;}});" +
-        "Object.defineProperty(kd,'which',{get:function(){return 40;}});" +
-        "input.dispatchEvent(kd);}catch(_){}" +
-      // Eval onkeydown si présent
-      (onkeydownAttr
-        ? "try{(function(event){" + onkeydownAttr + "})(new KeyboardEvent('keydown',{bubbles:true,key:'ArrowDown',keyCode:40}));}catch(_){}"
-        : "") +
-      // Eval onclick de l'input
-      (onclickAttr
-        ? "try{(function(event){" + onclickAttr + "})(new MouseEvent('click',{bubbles:true}));}catch(_){}"
-        : "") +
-      "try{input.click();}catch(_){}" +
-    "}catch(e){console.warn('[CVGen MAIN] openSFCombobox failed',e);}}())";
-
-  execInMainWorld(script);
+  await execMainSF({ action: "openCombobox", id: inputId, btnId: btnEl ? btnId : "" });
   await new Promise(function (r) { setTimeout(r, 80); });
 }
 
