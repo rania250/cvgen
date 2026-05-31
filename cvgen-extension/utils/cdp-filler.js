@@ -155,11 +155,10 @@ var CdpFiller = (function () {
     if (root.contentDocument) indexOcInputs(root.contentDocument, map);
   }
 
-  // Fonction exécutée DANS la page, avec `this` = le vrai <input> (même dans un
-  // shadow fermé, grâce à DOM.resolveNode → Runtime.callFunctionOn).
-  // 1) frappe "trusted" via Input.insertText (gérée en amont) — ici on complète
-  //    avec le setter natif + événements composés (composed:true) pour franchir
-  //    les frontières shadow et notifier Angular, et on renvoie un diagnostic.
+  // Setter natif + événements composés. Utilisé UNIQUEMENT en dernier recours si
+  // la frappe clavier "trusted" n'a rien donné (ex. focus impossible). Ce chemin
+  // ne met pas toujours à jour le modèle Angular (événements non "trusted"), d'où
+  // la priorité donnée à la frappe clavier réelle ci-dessous.
   var FILL_FN = function (v) {
     try {
       var el = this;
@@ -179,49 +178,106 @@ var CdpFiller = (function () {
       el.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
       var rect = el.getBoundingClientRect();
       return {
-        ok: true,
-        tag: el.tagName,
-        type: el.type || "",
-        name: el.name || el.id || "",
-        readOnly: !!el.readOnly,
-        disabled: !!el.disabled,
-        visible: !!(rect.width > 0 && rect.height > 0),
-        value: el.value,
+        ok: true, tag: el.tagName, type: el.type || "", name: el.name || el.id || "",
+        readOnly: !!el.readOnly, disabled: !!el.disabled,
+        visible: !!(rect.width > 0 && rect.height > 0), value: el.value,
       };
     } catch (e) {
       return { ok: false, error: String(e && e.message ? e.message : e) };
     }
   };
 
-  async function fillNode(tabId, nodeId, value) {
-    // Frappe clavier "trusted" d'abord (focus + sélection + insertText) :
-    // c'est ce qui fait réagir les composants les plus stricts.
+  // Exécutée DANS la page sur le vrai <input> : valide la saisie (change + blur)
+  // et renvoie un diagnostic (sans modifier la valeur — la frappe l'a déjà fait).
+  var DIAG_FN = function () {
     try {
-      await send(tabId, "DOM.focus", { nodeId: nodeId });
-      await send(tabId, "Input.dispatchKeyEvent", {
-        type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
-      });
-      await send(tabId, "Input.dispatchKeyEvent", {
-        type: "keyUp", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
-      });
-      await send(tabId, "Input.insertText", { text: String(value) });
-    } catch (_) {
-      // pas grave : le setter natif ci-dessous prend le relais
+      var el = this;
+      el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      el.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
+      var rect = el.getBoundingClientRect();
+      return {
+        ok: true, tag: el.tagName, type: el.type || "", name: el.name || el.id || "",
+        readOnly: !!el.readOnly, disabled: !!el.disabled,
+        visible: !!(rect.width > 0 && rect.height > 0), value: el.value,
+      };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
     }
+  };
 
-    // Puis setter natif + événements composés (au cas où insertText ait visé un
-    // input caché/proxy) + diagnostic sur le vrai input ciblé.
+  // Sélectionne tout (Ctrl+A) puis supprime, en touches "trusted".
+  async function clearField(tabId) {
+    await send(tabId, "Input.dispatchKeyEvent", {
+      type: "keyDown", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+    });
+    await send(tabId, "Input.dispatchKeyEvent", {
+      type: "keyUp", modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65,
+    });
+    await send(tabId, "Input.dispatchKeyEvent", {
+      type: "keyDown", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46,
+    });
+    await send(tabId, "Input.dispatchKeyEvent", {
+      type: "keyUp", key: "Delete", code: "Delete", windowsVirtualKeyCode: 46,
+    });
+  }
+
+  // Frappe caractère par caractère en événements clavier "trusted" : c'est la
+  // reproduction la plus fidèle d'une vraie saisie, qui met à jour le modèle
+  // Angular des composants custom (ControlValueAccessor) — contrairement à un
+  // simple setter de .value qui se fait écraser au prochain re-render.
+  async function typeChars(tabId, value) {
+    var s = String(value);
+    for (var i = 0; i < s.length; i++) {
+      var ch = s[i];
+      await send(tabId, "Input.dispatchKeyEvent", {
+        type: "keyDown", text: ch, unmodifiedText: ch, key: ch,
+      });
+      await send(tabId, "Input.dispatchKeyEvent", { type: "keyUp", key: ch });
+    }
+  }
+
+  async function fillNode(tabId, nodeId, value) {
+    var str = String(value);
+
     var resolved = await send(tabId, "DOM.resolveNode", { nodeId: nodeId });
     var objectId = resolved && resolved.object && resolved.object.objectId;
     if (!objectId) return { ok: false, error: "resolveNode sans objectId" };
 
+    // Focus fiable : DOM.focus (niveau CDP, traverse le shadow fermé) + el.focus()
+    // exécuté dans la page, pour garantir que la frappe atterrira dans cet input.
+    try { await send(tabId, "DOM.focus", { nodeId: nodeId }); } catch (_) {}
+    try {
+      await send(tabId, "Runtime.callFunctionOn", {
+        objectId: objectId,
+        functionDeclaration: "function(){ try { this.focus(); } catch(e){} }",
+      });
+    } catch (_) {}
+
+    // Effacer puis taper la valeur, touche par touche (trusted).
+    try {
+      await clearField(tabId);
+      await typeChars(tabId, str);
+    } catch (_) {}
+
+    // Valider (change + blur) et lire la valeur réellement présente.
     var res = await send(tabId, "Runtime.callFunctionOn", {
       objectId: objectId,
-      functionDeclaration: "(" + FILL_FN.toString() + ")",
-      arguments: [{ value: String(value) }],
+      functionDeclaration: "(" + DIAG_FN.toString() + ")",
       returnByValue: true,
     });
-    return (res && res.result && res.result.value) || { ok: false, error: "pas de retour" };
+    var diag = (res && res.result && res.result.value) || { ok: false, error: "pas de retour" };
+
+    // Dernier recours : si la frappe trusted n'a rien donné, setter natif.
+    if (!diag.ok || String(diag.value) !== str) {
+      var res2 = await send(tabId, "Runtime.callFunctionOn", {
+        objectId: objectId,
+        functionDeclaration: "(" + FILL_FN.toString() + ")",
+        arguments: [{ value: str }],
+        returnByValue: true,
+      });
+      diag = (res2 && res2.result && res2.result.value) || diag;
+    }
+    return diag;
   }
 
   /**
