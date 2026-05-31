@@ -98,6 +98,21 @@ async function clickSaveButton(container) {
     return false;
   }
 
+  // Diagnostic : pourquoi la sauvegarde échouerait-elle ? On logge l'état du
+  // bouton (souvent désactivé tant que le formulaire est ng-invalid) et la
+  // liste des champs encore invalides/obligatoires-vides.
+  var btnDisabled =
+    saveBtn.disabled === true ||
+    saveBtn.getAttribute("disabled") !== null ||
+    saveBtn.getAttribute("aria-disabled") === "true" ||
+    /\bdisabled\b/.test(saveBtn.className || "");
+  var invalidFields = diagnoseInvalidFields(container);
+  Logger.log(
+    "Diagnostic save : bouton disabled=" + btnDisabled +
+    " | champs invalides (" + invalidFields.length + ") : " +
+    (invalidFields.join(" || ") || "aucun")
+  );
+
   Logger.log(
     "Clic Sauvegarder sur <" + saveBtn.tagName.toLowerCase() +
     "> texte='" + (saveBtn.innerText || "").substring(0, 30) + "'"
@@ -115,7 +130,58 @@ async function clickSaveButton(container) {
   }
   // Attendre que SR ferme le formulaire / persiste l'entrée
   await new Promise(function (r) { setTimeout(r, 600); });
+
+  // Vérif post-clic : le formulaire d'édition est-il toujours présent
+  // (= non sauvegardé) ? Si oui, on logge les champs encore invalides.
+  var stillOpen = querySelectorAllDeep(
+    container, 'input:not([type="hidden"]), textarea, select'
+  ).length > 0 && document.body.contains(container);
+  if (stillOpen) {
+    var stillInvalid = diagnoseInvalidFields(container);
+    if (stillInvalid.length > 0) {
+      Logger.warn(
+        "Après save : formulaire toujours ouvert, champs invalides (" +
+        stillInvalid.length + ") : " + stillInvalid.join(" || ")
+      );
+    }
+  }
   return true;
+}
+
+/**
+ * Liste les champs invalides/obligatoires-vides dans un container (deep).
+ * Sert à diagnostiquer pourquoi un formulaire reste ng-invalid (sauvegarde
+ * refusée).
+ * @param {Element} scope
+ * @returns {string[]}
+ */
+function diagnoseInvalidFields(scope) {
+  var out = [];
+  if (!scope) return out;
+  var fields = querySelectorAllDeep(
+    scope, 'input:not([type="hidden"]), textarea, select, [role="combobox"]'
+  );
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    var ariaInv = f.getAttribute("aria-invalid");
+    var cls = (typeof f.className === "string" ? f.className : "") + "";
+    var ngInvalid = /\bng-invalid\b/.test(cls);
+    var required =
+      f.required === true ||
+      f.getAttribute("required") !== null ||
+      f.getAttribute("aria-required") === "true";
+    var val = (f.value || "").trim();
+    if (ariaInv === "true" || ngInvalid || (required && !val)) {
+      out.push(
+        '"' + getInputLabel(f).substring(0, 24) + '"' +
+        " [aria-invalid=" + (ariaInv || "-") +
+        " ngInvalid=" + ngInvalid +
+        " req=" + required +
+        " val='" + val.substring(0, 18) + "']"
+      );
+    }
+  }
+  return out;
 }
 
 /**
