@@ -1354,6 +1354,9 @@ async function fillSFCombobox(input, value) {
         "fillSFCombobox: aucune option pour '" + value +
         "' parmi " + countOptions(listbox) + " (après filtre + attente AJAX)"
       );
+      Logger.log(
+        "fillSFCombobox: options proposées par SF = " + listOptionTexts(listbox, 15)
+      );
       try { document.body.click(); } catch (_) {}
       return false;
     }
@@ -1486,6 +1489,25 @@ function countOptions(listbox) {
   return listbox.querySelectorAll(
     '[role="option"], li[id], li[class*="option"], [class*="picklistoption"]'
   ).length;
+}
+
+/**
+ * Renvoie les libellés des premières options (pour diagnostic quand aucune
+ * option ne correspond à la valeur du profil).
+ */
+function listOptionTexts(listbox, max) {
+  if (!listbox) return "(listbox null)";
+  var opts = Array.prototype.slice.call(
+    listbox.querySelectorAll(
+      '[role="option"], li[id], li[class*="option"], [class*="picklistoption"]'
+    )
+  );
+  var texts = [];
+  for (var i = 0; i < opts.length && texts.length < (max || 15); i++) {
+    var t = (opts[i].textContent || "").trim();
+    if (t) texts.push(t);
+  }
+  return texts.length ? texts.join(" | ") : "(aucune)";
 }
 
 /**
