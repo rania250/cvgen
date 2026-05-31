@@ -1587,6 +1587,105 @@ async function waitForSFOptionMatch(input, value, timeoutMs) {
   return { listbox: lastListbox, match: null };
 }
 
+// Équivalences de vocabulaire : mappe une valeur de profil (ex "Bac+5", "Bon")
+// vers le vocabulaire réel des listes SuccessFactors (ex "Bac +4/+5", "Avancé").
+// IMPORTANT : groupes spécifiques AVANT les génériques (l'ordre = la priorité).
+// Les chaînes sont normalisées par matchOptionBySynonym (normalize supprime
+// accents/ponctuation, donc "Bac+5" devient "bac 5", "Bac +4/+5" → "bac 4 5").
+var SF_SYNONYM_GROUPS = [
+  // ── Niveaux d'étude ──────────────────────────────────────────────
+  {
+    from: ["bac+5", "bac5", "master", "master 1", "master 2", "m1", "m2",
+           "ingenieur", "mastere", "maitrise", "bac+4", "bac4", "grande ecole"],
+    to: ["bac +4/+5", "bac+5", "bac+4", "master", "mastere"],
+  },
+  {
+    from: ["bac+6", "bac+8", "doctorat", "doctorate", "phd", "these"],
+    to: ["bac +6", "bac+6", "bac +8", "doctorat"],
+  },
+  {
+    from: ["bac+2", "bac2", "bts", "dut", "but", "deug"],
+    to: ["bac+2", "bts", "dut"],
+  },
+  {
+    from: ["bac+3", "bac3", "licence", "bachelor", "licence pro"],
+    to: ["bac+3", "licence", "bachelor"],
+  },
+  {
+    from: ["cap", "bep"],
+    to: ["bep/cap", "cap/bep", "cap", "bep"],
+  },
+  {
+    from: ["bac", "baccalaureat", "terminale"],
+    to: ["baccalaureat", "bac"],
+  },
+  // ── Niveaux de langue (échelle SF : Débutant / Intermédiaire / Avancé) ─
+  {
+    from: ["debutant", "debutante", "notions", "notion", "scolaire", "faible",
+           "bases", "base", "elementaire", "a1", "a2", "beginner"],
+    to: ["debutant", "elementaire", "notions", "beginner"],
+  },
+  {
+    from: ["moyen", "moyenne", "intermediaire", "intermediate", "passable",
+           "assez bon", "b1", "b2"],
+    to: ["intermediaire", "intermediate", "moyen"],
+  },
+  {
+    // "Bon" → "Avancé" (échelle à 3 niveaux : bon = au-dessus de la moyenne)
+    from: ["bon", "bonne", "tres bon", "tres bonne", "tres bien", "courant",
+           "avance", "avancee", "advanced", "bilingue", "maternelle",
+           "langue maternelle", "natif", "native", "experimente", "fluent",
+           "c1", "c2"],
+    to: ["avance", "courant", "bilingue", "fluent", "advanced",
+         "langue maternelle", "experimente"],
+  },
+];
+
+/**
+ * Teste si fromTok apparaît comme mot/séquence de mots entiers dans normVal.
+ * Évite que "bon" soit capté par "assez bon", etc.
+ */
+function sfTokenMatches(normVal, fromTok) {
+  if (!normVal || !fromTok) return false;
+  if (normVal === fromTok) return true;
+  var escaped = fromTok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("(^|\\s)" + escaped + "($|\\s)").test(normVal);
+}
+
+/**
+ * Cherche une option équivalente via la table de synonymes SF_SYNONYM_GROUPS.
+ * Ne retourne que des options réellement présentes dans la listbox (donc pas
+ * de faux positif inter-vocabulaire).
+ */
+function matchOptionBySynonym(options, normalizedVal) {
+  if (!normalizedVal) return null;
+  for (var g = 0; g < SF_SYNONYM_GROUPS.length; g++) {
+    var group = SF_SYNONYM_GROUPS[g];
+    var inGroup = false;
+    for (var f = 0; f < group.from.length; f++) {
+      if (sfTokenMatches(normalizedVal, normalize(group.from[f]))) {
+        inGroup = true;
+        break;
+      }
+    }
+    if (!inGroup) continue;
+    for (var t = 0; t < group.to.length; t++) {
+      var toNorm = normalize(group.to[t]);
+      for (var o = 0; o < options.length; o++) {
+        var optText = normalize(options[o].textContent || "");
+        if (
+          optText === toNorm ||
+          optText.indexOf(toNorm) !== -1 ||
+          (toNorm.length > 2 && toNorm.indexOf(optText) !== -1 && optText.length > 2)
+        ) {
+          return options[o];
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Cherche une option dans la listbox qui match la value (exact puis inclusion).
  */
@@ -1623,6 +1722,15 @@ function findOptionInListbox(listbox, value) {
     ) {
       return options[k];
     }
+  }
+  // 4. Équivalences de vocabulaire (Bac+5 → "Bac +4/+5", Bon → "Avancé", …)
+  var syn = matchOptionBySynonym(options, normalizedVal);
+  if (syn) {
+    Logger.log(
+      "fillSFCombobox: correspondance par synonyme '" + value + "' → '" +
+      (syn.textContent || "").trim() + "'"
+    );
+    return syn;
   }
   return null;
 }
