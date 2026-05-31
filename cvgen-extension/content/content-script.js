@@ -847,11 +847,11 @@
         }
       }
 
-      if (ocClosedFields.length > 0) {
-        // On attend la fin du remplissage CDP (multi-passes) pour que les
-        // champs perso soient stabilisés avant que l'agent ne propose l'envoi.
-        await fillClosedShadowViaCDP(ocClosedFields, manualOcFields);
-      } else if (manualOcFields.length > 0) {
+      // IMPORTANT : on NE remplit PAS encore les champs perso à shadow fermé.
+      // L'upload des fichiers (ci-dessous) déclenche un re-render Angular qui
+      // viderait ces champs juste après. Le remplissage CDP est donc DIFFÉRÉ
+      // tout à la fin (étape 6), après l'upload.
+      if (ocClosedFields.length === 0 && manualOcFields.length > 0) {
         showManualFieldsBanner(manualOcFields);
       }
     } catch (ocErr) {
@@ -922,6 +922,20 @@
         }
       } catch (fileErr) {
         Logger.warn("Upload fichiers : " + fileErr.message);
+      }
+    }
+
+    // 6. Champs perso à Shadow DOM fermé (oc-input) via CDP — EN DERNIER.
+    // Fait APRÈS l'upload des fichiers : l'upload déclenche un re-render Angular
+    // qui, sinon, viderait ces champs juste après les avoir remplis. On laisse
+    // d'abord ce re-render se produire (petit délai), puis on remplit en multi-
+    // passes (le CDP re-remplit ce qui serait encore vidé).
+    if (typeof ocClosedFields !== "undefined" && ocClosedFields.length > 0) {
+      try {
+        await new Promise(function (r) { setTimeout(r, 700); });
+        await fillClosedShadowViaCDP(ocClosedFields, manualOcFields);
+      } catch (cdpErr) {
+        Logger.warn("Remplissage CDP différé : " + cdpErr.message);
       }
     }
 
