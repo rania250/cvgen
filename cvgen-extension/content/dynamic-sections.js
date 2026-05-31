@@ -1515,19 +1515,48 @@ function listOptionTexts(listbox, max) {
  * options — utile pour patienter le chargement AJAX).
  */
 function findSFListboxNow(input) {
+  // 1. Association explicite (la plus fiable) : aria-owns / aria-controls.
   var listboxId =
     input.getAttribute("aria-owns") || input.getAttribute("aria-controls");
-  var listbox = listboxId ? document.getElementById(listboxId) : null;
-  if (!listbox) {
-    listbox = document.querySelector(
-      '[role="listbox"]:not([aria-hidden="true"]), ' +
-      '[class*="dropdown-menu"]:not([style*="display: none"]):not([style*="display:none"]), ' +
-      '[class*="picklist-popover"]:not([aria-hidden="true"]), ' +
-      '[class*="sfPicklist"]:not([aria-hidden="true"]), ' +
-      'ul[class*="dropdown"]:not([aria-hidden="true"])'
-    );
+  if (listboxId) {
+    var byAria = document.getElementById(listboxId);
+    if (byAria) return byAria;
   }
-  return listbox;
+
+  // 2. Sinon, parmi toutes les listbox visibles, prendre celle GÉOMÉTRIQUEMENT
+  //    la plus proche de l'input (SF réutilise/empile des popovers : sans ce
+  //    filtre on risque de lire une listbox périmée d'un autre champ — ex. le
+  //    "Niveau d'étude=Bac+4" restant ouvert pour un champ langue).
+  var candidates = document.querySelectorAll(
+    '[role="listbox"]:not([aria-hidden="true"]), ' +
+    '[class*="dropdown-menu"]:not([style*="display: none"]):not([style*="display:none"]), ' +
+    '[class*="picklist-popover"]:not([aria-hidden="true"]), ' +
+    '[class*="sfPicklist"]:not([aria-hidden="true"]), ' +
+    'ul[class*="dropdown"]:not([aria-hidden="true"])'
+  );
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  var ir;
+  try { ir = input.getBoundingClientRect(); } catch (_) { return candidates[0]; }
+  var best = null;
+  var bestDist = Infinity;
+  for (var i = 0; i < candidates.length; i++) {
+    var lb = candidates[i];
+    if (countOptions(lb) === 0) continue;
+    var r;
+    try { r = lb.getBoundingClientRect(); } catch (_) { continue; }
+    if (r.width === 0 && r.height === 0) continue;
+    // Distance verticale entre le bas de l'input et le haut/centre de la listbox.
+    var dx = Math.max(0, Math.max(ir.left - r.right, r.left - ir.right));
+    var dy = Math.abs(r.top - ir.bottom);
+    var dist = dx * 3 + dy; // pénalise surtout l'écart horizontal (autre colonne)
+    if (dist < bestDist) { bestDist = dist; best = lb; }
+  }
+  // Si la plus proche est très loin (> 600px), c'est probablement une listbox
+  // périmée d'un autre champ → on préfère ne rien renvoyer.
+  if (best && bestDist > 600) return null;
+  return best || candidates[0];
 }
 
 /**
